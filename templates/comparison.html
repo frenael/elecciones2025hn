@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <title>JRV {{ jrv }} - Auditoría</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <style>
+        .image-viewer {
+            height: 100%;
+            overflow: hidden;
+            background: #334155;
+            position: relative;
+        }
+
+        .diff-row {
+            background-color: #fee2e2;
+            color: #991b1b;
+            font-weight: bold;
+        }
+
+        .zoomable-img {
+            max-width: 100%;
+            transition: transform 0.1s ease-out;
+            transform-origin: top left;
+        }
+
+        .pdf-frame {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        .zoom-controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+            padding: 5px 15px;
+            border-radius: 20px;
+            display: flex;
+            gap: 15px;
+            z-index: 50;
+            color: white;
+        }
+
+        .zoom-btn:hover {
+            color: #60a5fa;
+            cursor: pointer;
+        }
+
+        .editable {
+            cursor: text;
+            border-bottom: 1px dashed #94a3b8;
+            padding: 2px 4px;
+        }
+
+        .editable:focus {
+            background: #fef08a;
+            outline: none;
+            border-bottom: 2px solid #ca8a04;
+        }
+
+        .status-badge {
+            font-size: 0.75rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+
+        .status-unverified {
+            background: #ffedd5;
+            color: #c2410c;
+            border: 1px solid #fdba74;
+        }
+
+        .status-verified {
+            background: #dcfce7;
+            color: #166534;
+            border: 1px solid #86efac;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-100 h-screen flex flex-col overflow-hidden">
+
+    <!-- Navbar -->
+    <div class="bg-white border-b px-6 py-2 flex justify-between items-center shadow-sm z-20 shrink-0">
+        <div class="flex items-center gap-4">
+            <a href="/" class="text-gray-500 hover:text-black" title="Volver al Dashboard"><i
+                    class="ph ph-house text-xl"></i></a>
+
+            {% if prev_jrv %}
+            <a href="/comparison/{{ prev_jrv }}?level={{ level }}"
+                class="bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1.5 rounded-lg font-bold text-sm shadow-sm transition-colors flex items-center gap-1">
+                <i class="ph ph-caret-left"></i> Anterior
+            </a>
+            {% else %}
+            <button disabled
+                class="bg-gray-50 text-gray-300 px-3 py-1.5 rounded-lg font-bold text-sm flex items-center gap-1 cursor-not-allowed">
+                <i class="ph ph-caret-left"></i> Anterior
+            </button>
+            {% endif %}
+
+            <div>
+                <h1 class="font-bold text-lg text-slate-800 flex items-center gap-2 ml-2">
+                    JRV #{{ jrv }}
+                    {% if comp_data.trep.meta and comp_data.trep.meta.estado == 'VALIDADO' %}
+                    <span class="status-badge status-verified"><i class="ph ph-check-circle"></i> VALIDADO</span>
+                    {% else %}
+                    <span class="status-badge status-unverified"><i class="ph ph-warning-circle"></i> PENDIENTE</span>
+                    {% endif %}
+                </h1>
+            </div>
+        </div>
+
+        <div class="flex gap-2">
+            <button id="btn-save" onclick="saveChangesUI()"
+                class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded-lg font-bold text-sm flex items-center gap-2 shadow-sm transition-colors">
+                <i class="ph ph-floppy-disk"></i> GUARDAR
+            </button>
+            <button id="btn-validate" onclick="validateAndNext()"
+                class="bg-green-600 hover:bg-green-700 text-white px-6 py-1.5 rounded-lg font-bold text-sm flex items-center gap-2 shadow-sm transition-colors">
+                VALIDAR Y SIGUIENTE <i class="ph ph-caret-right text-lg"></i>
+            </button>
+
+            {% if next_jrv %}
+            <a href="/comparison/{{ next_jrv }}?level={{ level }}"
+                class="text-gray-400 hover:text-gray-600 px-2 flex items-center" title="Siguiente sin validar">
+                <i class="ph ph-caret-right text-xl"></i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Layout 3 Columnas -->
+    <!-- Layout Principal -->
+    <div class="flex flex-col flex-1 overflow-hidden">
+
+        <!-- Formulario Cierre Info -->
+        {% if comp_data and comp_data.header_info %}
+        <div
+            class="bg-indigo-900/50 border-b border-indigo-700 p-3 text-xs text-indigo-100 flex flex-wrap gap-4 items-center justify-center shrink-0">
+            <div class="flex items-center gap-1">
+                <i class="ph ph-user font-bold text-indigo-300"></i>
+                <span class="font-bold">Observador:</span> {{ comp_data.header_info.observador }}
+            </div>
+            <div class="flex items-center gap-1">
+                <i class="ph ph-map-pin font-bold text-indigo-300"></i>
+                <span class="font-bold">Ubicación:</span>
+                {{ comp_data.header_info.depto}} - {{ comp_data.header_info.muni}}
+            </div>
+            <div class="flex items-center gap-1">
+                <i class="ph ph-buildings font-bold text-indigo-300"></i>
+                <span class="font-bold">Centro:</span> {{ comp_data.header_info.centro }}
+            </div>
+            {% if comp_data.header_info.votantes_registro %}
+            <div class="flex items-center gap-1 bg-indigo-800 px-2 py-0.5 rounded-full border border-indigo-600">
+                <i class="ph ph-users font-bold text-cyan-400"></i>
+                <span class="font-bold text-indigo-200">Votantes Reg.:</span>
+                <span class="font-bold text-white">{{ comp_data.header_info.votantes_registro }}</span>
+            </div>
+            {% endif %}
+
+            {% if comp_data.header_info.participacion %}
+            <div class="flex items-center gap-1 bg-indigo-800 px-2 py-0.5 rounded-full border border-indigo-600">
+                <i class="ph ph-chart-pie-slice font-bold text-emerald-400"></i>
+                <span class="font-bold text-indigo-200">Participación:</span>
+                <span class="font-bold text-white">{{ comp_data.header_info.participacion }}</span>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Level Selector -->
+        <div class="bg-slate-900 p-4 flex justify-center space-x-4 shrink-0">
+            {% for l in ['PRESIDENTE', 'DIPUTADOS', 'ALCALDE'] %}
+            <a href="{{ url_for('comparison', jrv=jrv, level=l) }}"
+                class="px-4 py-2 rounded-lg font-bold {{ 'bg-blue-600 text-white' if level == l else 'bg-slate-700 text-slate-300 hover:bg-slate-600' }}">
+                {{ l }}
+            </a>
+            {% endfor %}
+        </div>
+
+        <!-- Main Content: 3 Columns -->
+        <div class="flex-1 flex overflow-hidden">
+
+            <!-- Left Column: FRENAEL Image -->
+            <div class="w-1/3 bg-black flex flex-col border-r border-slate-700 relative group">
+                <div class="absolute top-2 left-2 z-10 bg-black/70 text-white text-xs px-2 py-1 rounded">
+                    FRENAEL ({{ level }})
+                </div>
+
+                <!-- Hidden Input -->
+                <input type="file" id="file-trep" class="hidden" accept="image/*" onchange="uploadActa('TREP')">
+
+                <div class="image-viewer flex-1 relative w-full h-full overflow-hidden flex justify-center items-center bg-gray-900"
+                    id="viewer-trep">
+                    {% if comp_data.has_trep and comp_data.trep.meta and comp_data.trep.meta.filepath %}
+                    <img src="/{{ comp_data.trep.meta.filepath }}"
+                        class="zoomable-img max-w-full max-h-full object-contain transition-transform duration-200 ease-out origin-center"
+                        id="img-trep" alt="Acta FRENAEL">
+                    {% else %}
+                    <div class="flex items-center justify-center h-full text-slate-500 flex-col gap-4">
+                        <i class="ph ph-image-slash text-4xl mb-2"></i>
+                        <p class="text-lg font-bold">{% if comp_data.has_trep == False %}SIN ACTA{% else %}No Image{%
+                            endif %}</p>
+                        <button onclick="triggerUpload('TREP')"
+                            class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-full flex items-center gap-2 transition-transform hover:scale-105 shadow-lg z-30 pointer-events-auto">
+                            <i class="ph ph-upload-simple font-bold"></i>
+                            Subir Acta
+                        </button>
+                    </div>
+                    {% endif %}
+
+                    {% if comp_data.has_trep == False %}
+                    <div class="absolute inset-0 flex items-center justify-center bg-black/50 pointer-events-none">
+                        <span
+                            class="text-red-500 font-bold text-3xl opacity-50 -rotate-12 border-4 border-red-500 p-4 rounded">SIN
+                            ACTA</span>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Controls -->
+                <div
+                    class="absolute bottom-4 left-1/2 -translate-x-1/2 flex space-x-2 text-white bg-black/60 px-3 py-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-50">
+                    <button onclick="rotate('img-trep', -90)" title="Rotar Izquierda" class="hover:text-blue-400"><i
+                            class="ph ph-arrow-counter-clockwise"></i></button>
+                    <button onclick="changeZoom('img-trep', -0.5)" title="Alejar" class="hover:text-blue-400"><i
+                            class="ph ph-minus-circle"></i></button>
+                    <button onclick="resetZoom('img-trep')" title="Reset" class="hover:text-blue-400"><i
+                            class="ph ph-arrows-out"></i></button>
+                    <button onclick="changeZoom('img-trep', 0.5)" title="Acercar" class="hover:text-blue-400"><i
+                            class="ph ph-plus-circle"></i></button>
+                    <button onclick="rotate('img-trep', 90)" title="Rotar Derecha" class="hover:text-blue-400"><i
+                            class="ph ph-arrow-clockwise"></i></button>
+
+                    <div class="w-px bg-gray-500 mx-2"></div>
+
+                    <button onclick="triggerUpload('TREP')" title="Reemplazar Imagen" class="hover:text-yellow-400"><i
+                            class="ph ph-swap"></i></button>
+                    {% if comp_data.has_trep %}
+                    <button onclick="deleteActa('TREP')" title="Eliminar Acta" class="hover:text-red-500"><i
+                            class="ph ph-trash"></i></button>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Center Column: Unified Data Table -->
+            <div class="flex-1 bg-slate-900 border-x border-slate-700 flex flex-col min-w-[400px]">
+
+                <!-- Table Header -->
+                <div
+                    class="bg-indigo-900 text-white p-2 text-center text-sm font-bold shadow-md z-10 flex flex-col justify-center">
+                    <span>COMPARATIVA DE VOTOS</span>
+                    {% if comp_data.has_trep == False %}
+                    <span class="text-xs text-red-300 bg-red-900/50 px-2 rounded mt-1 animate-pulse">⚠ SIN ACTA EN
+                        FRENAEL - DATOS EN CERO</span>
+                    {% endif %}
+                </div>
+
+                <!-- LIST VIEW (Presidente / Alcalde) -->
+                {% if level != 'DIPUTADOS' %}
+                <div class="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                    <table class="w-full text-sm text-left text-slate-300">
+                        <thead class="text-xs text-slate-400 uppercase bg-slate-800 sticky top-0 z-10 shadow-sm">
+                            <tr>
+                                <th class="px-3 py-2 rounded-tl-lg">Candidato</th>
+                                <th class="px-3 py-2 text-right bg-blue-900/30 text-blue-200">
+                                    FRENAEL
+                                </th>
+                                <th class="px-3 py-2 text-right bg-emerald-900/30 text-emerald-200">
+                                    OFICIAL
+                                </th>
+                                <th class="px-3 py-2 text-center rounded-tr-lg">Diff</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-700">
+                            {% for cand in comp_data.all_candidates %}
+                            {% set v_trep = comp_data.trep.votos.get(cand, 0) %}
+                            {% set v_esc = comp_data.esc.votos.get(cand, 0) %}
+                            {% set diff = (v_esc - v_trep) %}
+
+                            <tr class="hover:bg-slate-800 transition-colors data-row group">
+                                <td class="px-3 py-2 font-medium text-white truncate max-w-[180px]" title="{{ cand }}">
+                                    {{ cand }}</td>
+                                <td class="px-3 py-2 text-right bg-blue-900/10 group-hover:bg-blue-900/20">
+                                    <span class="trep-value hidden">{{ v_trep }}</span>
+                                    <input type="number" value="{{ v_trep }}" data-type="vote" data-key="{{ cand }}"
+                                        data-source="TREP"
+                                        class="editable w-20 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-right focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none text-white font-mono"
+                                        onkeydown="moveFocus(event, this)" oninput="markDirty()">
+                                </td>
+                                <td class="px-3 py-2 text-right bg-emerald-900/10 group-hover:bg-emerald-900/20">
+                                    <span class="esc-value hidden" data-val="{{ v_esc }}"></span>
+                                    <input type="number" value="{{ v_esc }}" data-type="vote" data-key="{{ cand }}"
+                                        data-source="OFICIAL"
+                                        class="editable w-20 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-right focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none text-white font-mono"
+                                        onkeydown="moveFocus(event, this)" oninput="markDirty()">
+                                </td>
+                                <td class="px-3 py-2 text-center diff-cell font-bold text-xs">{{ diff }}</td>
+                            </tr>
+                            {% endfor %}
+
+                            <!-- Summaries -->
+                            <!-- Summaries -->
+                            {% for key, label in {'votos_blancos': 'BLANCOS', 'votos_nulos': 'NULOS', 'gran_total':
+                            'TOTAL'}.items() %}
+                            {% set t_val = comp_data.trep.resumen[key] %}
+                            {% set e_val = comp_data.esc.resumen[key] %}
+                            <tr class="bg-slate-800/50 font-bold border-t border-slate-600 data-row summary-row"
+                                data-key="{{ key }}">
+                                <td class="px-3 py-2 text-slate-400 text-xs">{{ label }}</td>
+                                <td class="px-3 py-2 text-right text-slate-300">
+                                    {% if key == 'gran_total' %}
+                                    <span id="summary-trep-total" class="font-mono text-blue-300">{{ t_val }}</span>
+                                    {% else %}
+                                    <input type="number" value="{{ t_val }}" data-type="special" data-key="{{ key }}"
+                                        data-source="TREP"
+                                        class="editable w-20 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-right text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none text-white font-mono"
+                                        onkeydown="moveFocus(event, this)" oninput="markDirty()">
+                                    {% endif %}
+                                </td>
+                                <td class="px-3 py-2 text-right text-slate-300">
+                                    {% if key == 'gran_total' %}
+                                    <span id="summary-esc-total" class="font-mono text-emerald-300">{{ e_val }}</span>
+                                    {% else %}
+                                    <input type="number" value="{{ e_val }}" data-type="special" data-key="{{ key }}"
+                                        data-source="OFICIAL"
+                                        class="editable w-20 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-right text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none text-white font-mono"
+                                        onkeydown="moveFocus(event, this)" oninput="markDirty()">
+                                    {% endif %}
+                                </td>
+                                <td class="px-3 py-2 text-center text-xs diff-cell">{{ e_val - t_val }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endif %}
+
+                <!-- MATRIX VIEW FOR DIPUTADOS -->
+                {% if level == 'DIPUTADOS' and comp_data.matrix %}
+                <div class="flex-1 overflow-auto p-4 custom-scrollbar">
+                    <div class="overflow-visible shadow-md rounded-lg inline-block min-w-full">
+                        <table class="border-collapse border border-gray-300 text-sm bg-white table-auto">
+                            <thead class="sticky top-0 z-20 shadow-md">
+                                <tr>
+                                    <th class="border border-gray-300 bg-gray-100 p-1 w-8 text-center text-gray-500">#
+                                    </th>
+                                    {% for party in comp_data.matrix.parties %}
+                                    {% set party_styles = {
+                                    'NACIONAL': 'bg-blue-700 text-white',
+                                    'LIBERAL': 'bg-red-600 text-white',
+                                    'LIBRE': 'bg-red-800 text-white',
+                                    'DC': 'bg-green-600 text-white',
+                                    'PINU': 'bg-orange-500 text-white',
+                                    'PSH': 'bg-cyan-600 text-white',
+                                    'PN': 'bg-blue-700 text-white',
+                                    'PL': 'bg-red-600 text-white'
+                                    } %}
+                                    {% set bg_class = party_styles.get(party, 'bg-gray-700 text-white') %}
+                                    <th
+                                        class="border border-gray-300 {{ bg_class }} p-1 min-w-[85px] text-center uppercase tracking-wider text-[10px]">
+                                        <div class="flex flex-col items-center gap-0.5"><span>{{ party }}</span></div>
+                                    </th>
+                                    {% endfor %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for i in comp_data.matrix.rows %}
+                                <tr class="hover:bg-gray-50">
+                                    <td
+                                        class="border border-gray-300 p-1 font-bold text-center bg-gray-100 text-gray-600 text-[10px]">
+                                        {{ i }}</td>
+                                    {% for party in comp_data.matrix.parties %}
+                                    {% set key = comp_data.matrix.map[party][i] %}
+                                    <td
+                                        class="border border-gray-300 p-0.5 align-middle text-center h-10 relative min-w-[85px]">
+                                        {% if key %}
+                                        {% set val_trep = comp_data.trep.votos.get(key, 0) %}
+                                        {% set val_esc = comp_data.esc.votos.get(key, 0) %}
+
+                                        <div class="flex flex-col gap-0.5 justify-center items-stretch h-full w-full"
+                                            id="row-{{ key|replace(' ', '-') }}">
+
+                                            <!-- Candidate Name -->
+                                            {% set cand_name = comp_data.matrix.names.get(party, {}).get(i, '') %}
+                                            <div class="text-[8px] text-center font-bold text-gray-600 leading-tight bg-gray-50 border-b border-gray-200 p-0.5 truncate"
+                                                title="{{ cand_name }}">
+                                                {{ cand_name }}
+                                            </div>
+
+                                            <div class="flex gap-0.5 h-full">
+
+                                                <!-- F (FRENAEL) -->
+                                                <div
+                                                    class="flex-1 flex flex-col justify-center border border-blue-300 bg-blue-50 rounded text-center relative p-0.5">
+                                                    <!-- <span class="text-[6px] text-blue-600 font-bold leading-none mb-0.5">F</span> -->
+                                                    <input type="number"
+                                                        class="editable w-full bg-transparent text-center font-mono text-xs font-bold outline-none p-0 focus:ring-0 border-none appearance-none text-blue-800 leading-tight"
+                                                        value="{{ val_trep }}" data-type="vote" data-key="{{ key }}"
+                                                        data-source="TREP" onfocus="this.select()"
+                                                        onchange="updateValue('{{ key }}', 'TREP', this.value)"
+                                                        title="Frenael">
+                                                </div>
+
+                                                <!-- O (OFICIAL) -->
+                                                <div
+                                                    class="flex-1 flex flex-col justify-center border rounded text-center relative p-0.5
+                                                        {% if val_trep != val_esc %}border-red-300 bg-red-50{% else %}border-emerald-200 bg-emerald-50{% endif %}">
+                                                    <!-- <span class="text-[6px] font-bold leading-none mb-0.5 {% if val_trep != val_esc %}text-red-500{% else %}text-emerald-500{% endif %}">O</span> -->
+                                                    <input type="number"
+                                                        class="editable w-full bg-transparent text-center font-mono text-xs font-bold outline-none p-0 focus:ring-0 border-none appearance-none leading-tight
+                                                            {% if val_trep != val_esc %}text-red-700{% else %}text-emerald-700{% endif %}"
+                                                        value="{{ val_esc }}" data-type="vote" data-key="{{ key }}"
+                                                        data-source="OFICIAL" onfocus="this.select()"
+                                                        onchange="updateValue('{{ key }}', 'ESCRUTINIO', this.value)"
+                                                        title="Oficial">
+                                                </div>
+                                            </div>
+                                            {% else %}
+                                            <div
+                                                class="bg-gray-50 h-full w-full flex items-center justify-center text-gray-300">
+                                                <i class="ph ph-prohibit text-sm"></i>
+                                            </div>
+                                            {% endif %}
+                                    </td>
+                                    {% endfor %}
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot>
+                                <!-- TOTALS ROW -->
+                                <tr class="bg-gray-100 font-bold border-t-2 border-gray-400">
+                                    <td class="p-2 text-center text-gray-700 text-xs">TOTAL</td>
+                                    {% for party in comp_data.matrix.parties %}
+                                    {% set totals = comp_data.matrix.totals[party] %}
+                                    <td class="p-1 border border-gray-300">
+                                        <div class="flex gap-1 justify-center items-stretch h-full w-full">
+                                            <!-- F Total -->
+                                            <div
+                                                class="flex-1 flex flex-col justify-center border border-blue-300 bg-blue-50 rounded text-center p-0.5">
+                                                <span class="text-xs font-mono font-bold text-blue-900">{{ totals.trep
+                                                    }}</span>
+                                            </div>
+                                            <!-- O Total -->
+                                            <div
+                                                class="flex-1 flex flex-col justify-center border border-gray-300 bg-gray-50 rounded text-center p-0.5">
+                                                <span class="text-xs font-mono font-bold text-gray-900">{{ totals.esc
+                                                    }}</span>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    {% endfor %}
+                                </tr>
+                                <!-- DIFFERENCE ROW -->
+                                <tr class="bg-gray-200 font-bold border-t border-gray-300">
+                                    <td class="p-2 text-center text-gray-700 text-[10px] uppercase leading-tight">
+                                        DIFERENCIA<br>(F - O)</td>
+                                    {% for party in comp_data.matrix.parties %}
+                                    {% set diff = comp_data.matrix.totals[party].diff %}
+                                    <td class="p-1 border border-gray-300 text-center">
+                                        <div class="w-full flex items-center justify-center font-mono text-xs font-bold
+                                            {% if diff == 0 %}text-emerald-600{% else %}text-red-600{% endif %}">
+                                            {{ diff }}
+                                        </div>
+                                    </td>
+                                    {% endfor %}
+                                </tr>
+                                <!-- INLINE GLOBAL SUMMARY -->
+                                {% if level == 'DIPUTADOS' %}
+                                {% set col_span = comp_data.matrix.parties|length + 1 %}
+
+                                <!-- Total Validos -->
+                                <tr class="bg-gray-50 border-t border-gray-300">
+                                    <td colspan="{{ col_span }}" class="p-2">
+                                        <div class="flex items-center justify-end gap-3 pr-2">
+                                            <span class="font-bold text-gray-600 text-xs uppercase">Total Votos
+                                                Validos:</span>
+                                            <div class="w-20 text-center font-mono font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded px-2 py-1 text-xs"
+                                                id="summary-valid-trep">0</div>
+                                            <div class="w-20 text-center font-mono font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-2 py-1 text-xs"
+                                                id="summary-valid-esc">0</div>
+                                            <div class="w-12"></div> <!-- Spacer for Diff -->
+                                        </div>
+                                    </td>
+                                </tr>
+
+                                <!-- Votos Blancos -->
+                                <tr class="bg-white border-t border-gray-200 summary-row" data-key="votos_blancos">
+                                    <td colspan="{{ col_span }}" class="p-2">
+                                        <div class="flex items-center justify-end gap-3 pr-2">
+                                            <span class="font-bold text-gray-600 text-xs uppercase">Votos
+                                                Blancos:</span>
+
+                                            <!-- TREP -->
+                                            <input type="number"
+                                                class="editable w-20 bg-white border border-blue-300 rounded px-2 py-1 text-center text-xs font-mono font-bold text-blue-800 focus:ring-1 focus:ring-blue-500 outline-none"
+                                                value="{{ comp_data.trep.resumen.votos_blancos }}" data-type="resumen"
+                                                data-key="votos_blancos" data-source="TREP" onfocus="this.select()"
+                                                onchange="updateValue('votos_blancos', 'TREP', this.value, true)">
+
+                                            <!-- OFICIAL -->
+                                            <input type="number"
+                                                class="editable w-20 bg-white border border-emerald-300 rounded px-2 py-1 text-center text-xs font-mono font-bold text-emerald-800 focus:ring-1 focus:ring-emerald-500 outline-none"
+                                                value="{{ comp_data.esc.resumen.votos_blancos }}" data-type="resumen"
+                                                data-key="votos_blancos" data-source="OFICIAL" onfocus="this.select()"
+                                                onchange="updateValue('votos_blancos', 'OFICIAL', this.value, true)"
+                                                title="Oficial">
+
+                                            <!-- Diff -->
+                                            <div class="w-12 text-center font-bold text-xs diff-cell">
+                                                {{ comp_data.esc.resumen.votos_blancos -
+                                                comp_data.trep.resumen.votos_blancos }}
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+
+                                <!-- Votos Nulos -->
+                                <tr class="bg-white border-t border-gray-200 summary-row" data-key="votos_nulos">
+                                    <td colspan="{{ col_span }}" class="p-2">
+                                        <div class="flex items-center justify-end gap-3 pr-2">
+                                            <span class="font-bold text-gray-600 text-xs uppercase">Votos Nulos:</span>
+
+                                            <!-- TREP -->
+                                            <input type="number"
+                                                class="editable w-20 bg-white border border-blue-300 rounded px-2 py-1 text-center text-xs font-mono font-bold text-blue-800 focus:ring-1 focus:ring-blue-500 outline-none"
+                                                value="{{ comp_data.trep.resumen.votos_nulos }}" data-type="resumen"
+                                                data-key="votos_nulos" data-source="TREP" onfocus="this.select()"
+                                                onchange="updateValue('votos_nulos', 'TREP', this.value, true)">
+
+                                            <!-- OFICIAL -->
+                                            <input type="number"
+                                                class="editable w-20 bg-white border border-emerald-300 rounded px-2 py-1 text-center text-xs font-mono font-bold text-emerald-800 focus:ring-1 focus:ring-emerald-500 outline-none"
+                                                value="{{ comp_data.esc.resumen.votos_nulos }}" data-type="resumen"
+                                                data-key="votos_nulos" data-source="OFICIAL" onfocus="this.select()"
+                                                onchange="updateValue('votos_nulos', 'OFICIAL', this.value, true)"
+                                                title="Oficial">
+
+                                            <!-- Diff -->
+                                            <div class="w-12 text-center font-bold text-xs diff-cell">
+                                                {{ comp_data.esc.resumen.votos_nulos -
+                                                comp_data.trep.resumen.votos_nulos }}
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+
+                                <!-- Gran Total -->
+                                <tr class="bg-gray-100 border-t-2 border-gray-400 font-bold summary-row"
+                                    data-key="gran_total">
+                                    <td colspan="{{ col_span }}" class="p-2">
+                                        <div class="flex items-center justify-end gap-3 pr-2 text-sm">
+                                            <span class="text-gray-800 uppercase">GRAN TOTAL:</span>
+                                            <div class="w-20 text-center text-blue-900" id="summary-total-trep">0</div>
+                                            <div class="w-20 text-center text-emerald-900" id="summary-total-esc">0
+                                            </div>
+                                            <div class="w-12 text-center diff-cell">0</div>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endif %}
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- GLOBAL SUMMARY REMOVED (Moving to Table Footer) -->
+
+                <!-- Summary Footer -->
+                <div
+                    class="bg-slate-800 p-3 flex justify-between items-center text-xs border-t border-slate-700 flex-shrink-0">
+                    <div class="flex space-x-4">
+                        <div class="text-slate-400">Total Validado: <span id="total-trep"
+                                class="text-white font-bold">-</span></div>
+                        <div class="text-slate-400">Total Oficial: <span id="total-esc"
+                                class="text-white font-bold">-</span></div>
+                    </div>
+                    <div id="save-status" class="text-slate-500 italic">Todo guardado</div>
+                </div>
+
+            </div>
+
+            <!-- Right Column: OFICIAL Image -->
+            <div class="w-1/3 bg-black flex flex-col border-l border-slate-700 relative group">
+                <div class="absolute top-2 right-2 z-10 bg-emerald-900/80 text-white text-xs px-2 py-1 rounded">
+                    OFICIAL ({{ level }})
+                </div>
+
+                <!-- Hidden Input -->
+                <input type="file" id="file-esc" class="hidden" accept="image/*" onchange="uploadActa('OFICIAL')">
+
+                <div class="image-viewer flex-1 relative w-full h-full overflow-hidden flex justify-center items-center bg-gray-900"
+                    id="viewer-esc">
+                    {% if comp_data.esc.meta and comp_data.esc.meta.filepath %}
+                    <img src="/{{ comp_data.esc.meta.filepath }}"
+                        class="zoomable-img max-w-full max-h-full object-contain transition-transform duration-200 ease-out origin-center"
+                        id="img-esc" alt="Acta OFICIAL">
+                    {% else %}
+                    <div class="flex items-center justify-center h-full text-slate-500 flex-col gap-4">
+                        <i class="ph ph-image-slash text-4xl mb-2"></i>
+                        <p class="text-lg font-bold">{% if comp_data.has_trep == False %}SIN ACTA{% else %}No Image{%
+                            endif %}</p>
+                        <button onclick="triggerUpload('OFICIAL')"
+                            class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-full flex items-center gap-2 transition-transform hover:scale-105 shadow-lg z-30 pointer-events-auto">
+                            <i class="ph ph-upload-simple font-bold"></i>
+                            Subir Acta
+                        </button>
+                    </div>
+                    {% endif %}
+
+                    {% if comp_data.has_trep == False %}
+                    <div class="absolute inset-0 flex items-center justify-center bg-black/50 pointer-events-none z-20">
+                        <span
+                            class="text-red-500 font-bold text-3xl opacity-80 -rotate-12 border-4 border-red-500 p-4 rounded bg-black/50">SIN
+                            ACTA</span>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Controls -->
+                <div
+                    class="absolute bottom-4 left-1/2 -translate-x-1/2 flex space-x-2 text-white bg-black/60 px-3 py-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-50">
+                    <button onclick="rotate('img-esc', -90)" title="Rotar Izquierda" class="hover:text-emerald-400"><i
+                            class="ph ph-arrow-counter-clockwise"></i></button>
+                    <button onclick="changeZoom('img-esc', -0.5)" title="Alejar" class="hover:text-emerald-400"><i
+                            class="ph ph-minus-circle"></i></button>
+                    <button onclick="resetZoom('img-esc')" title="Reset" class="hover:text-emerald-400"><i
+                            class="ph ph-arrows-out"></i></button>
+                    <button onclick="changeZoom('img-esc', 0.5)" title="Acercar" class="hover:text-emerald-400"><i
+                            class="ph ph-plus-circle"></i></button>
+                    <button onclick="rotate('img-esc', 90)" title="Rotar Derecha" class="hover:text-emerald-400"><i
+                            class="ph ph-arrow-clockwise"></i></button>
+
+                    <div class="w-px bg-gray-500 mx-2"></div>
+
+                    <button onclick="triggerUpload('OFICIAL')" title="Reemplazar Imagen"
+                        class="hover:text-yellow-400"><i class="ph ph-swap"></i></button>
+                    {% if comp_data.esc.meta and comp_data.esc.meta.id %}
+                    <button onclick="deleteActa('OFICIAL')" title="Eliminar Acta" class="hover:text-red-500"><i
+                            class="ph ph-trash"></i></button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const ID_TREP = {{ comp_data.trep.meta.id if comp_data.trep and comp_data.trep.meta else 0 }};
+        const ID_ESC = {{ comp_data.esc.meta.id if comp_data.esc and comp_data.esc.meta else 0 }};
+        let hasUnsavedChanges = false;
+
+        function updateCalculations() {
+            let totalTrep = 0;
+            let totalEsc = 0;
+
+            // 1. Sum Candidates (Works for List and Matrix views if structure matches)
+            document.querySelectorAll('tbody tr').forEach(row => {
+                // Skip summary rows to avoid double counting if they are in tbody
+                if (row.classList.contains('summary-row')) return;
+
+                // Sum inputs in this row
+                const inputs = row.querySelectorAll('input[data-type="vote"]');
+                inputs.forEach(inp => {
+                    if (inp.dataset.source === 'TREP') totalTrep += (parseInt(inp.value) || 0);
+                    if (inp.dataset.source === 'OFICIAL' || inp.dataset.source === 'ESCRUTINIO') totalEsc += (parseInt(inp.value) || 0);
+                });
+
+                // Update Row Diff (List View Specific)
+                const diffCell = row.querySelector('.diff-cell');
+                if (diffCell) {
+                    let rT = 0, rE = 0;
+                    const iT = row.querySelector('input[data-source="TREP"]');
+                    const iE = row.querySelector('input[data-source="OFICIAL"]');
+                    if (iT) rT = parseInt(iT.value) || 0;
+                    if (iE) rE = parseInt(iE.value) || 0;
+                    const d = rE - rT;
+                    if (d !== 0) diffCell.innerHTML = `<span class="text-red-400 bg-red-900/50 px-1.5 py-0.5 rounded font-bold">${d > 0 ? '+' + d : d}</span>`;
+                    else diffCell.innerHTML = `<i class="ph ph-check text-green-500"></i>`;
+                }
+            });
+
+            // 2. Update Header Totals (Candidates Only)
+            const fT = document.getElementById('total-trep');
+            const fE = document.getElementById('total-esc');
+            if (fT) fT.innerText = totalTrep.toLocaleString();
+            if (fE) fE.innerText = totalEsc.toLocaleString();
+
+            // 3. Global Summary (Deputies)
+            const sumValidTrep = document.getElementById('summary-valid-trep');
+            const sumValidEsc = document.getElementById('summary-valid-esc');
+
+            if (sumValidTrep && sumValidEsc) {
+                // Update Valid Votes
+                sumValidTrep.innerText = totalTrep.toLocaleString();
+                sumValidEsc.innerText = totalEsc.toLocaleString();
+
+                // Get Blancos / Nulos
+                const getVal = (key, source) => {
+                    // Try to find input specifically for summary
+                    const el = document.querySelector(`input[data-type="resumen"][data-key="${key}"][data-source="${source}"]`);
+                    return el ? (parseInt(el.value) || 0) : 0;
+                };
+
+                const blancosTrep = getVal('votos_blancos', 'TREP');
+                const nulosTrep = getVal('votos_nulos', 'TREP');
+                const blancosEsc = getVal('votos_blancos', 'ESCRUTINIO'); // Uses ESCRUTINIO in HTML
+                const nulosEsc = getVal('votos_nulos', 'ESCRUTINIO');
+
+                const granTotalTrep = totalTrep + blancosTrep + nulosTrep;
+                const granTotalEsc = totalEsc + blancosEsc + nulosEsc;
+
+                const elTotalTrep = document.getElementById('summary-total-trep');
+                const elTotalEsc = document.getElementById('summary-total-esc');
+                if (elTotalTrep) elTotalTrep.innerText = granTotalTrep.toLocaleString();
+                if (elTotalEsc) elTotalEsc.innerText = granTotalEsc.toLocaleString();
+            }
+        }
+
+        function markDirty() {
+            hasUnsavedChanges = true;
+            const s = document.getElementById('save-status');
+            if (s) {
+                s.innerText = "⚠️ Guardar Cambios";
+                s.classList.remove('text-slate-500', 'italic');
+                s.classList.add('text-yellow-500', 'font-bold', 'animate-pulse');
+            }
+            updateCalculations();
+        }
+
+        function moveFocus(e, el) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const all = Array.from(document.querySelectorAll('.editable'));
+                const i = all.indexOf(el);
+                if (i > -1 && i < all.length - 1) {
+                    all[i + 1].focus();
+                    if (document.execCommand) document.execCommand('selectAll', false, null);
+                } else el.blur();
+            }
+        }
+
+        // Missing function for Matrix View inputs
+        function updateValue(key, source, value) {
+            markDirty();
+        }
+
+        function hasChanges() { return hasUnsavedChanges; }
+
+        // Transform State Management
+        function getTransformState(img) {
+            return {
+                scale: parseFloat(img.dataset.scale) || 1,
+                rotate: parseInt(img.dataset.rotate) || 0,
+                panX: parseFloat(img.dataset.panX) || 0,
+                panY: parseFloat(img.dataset.panY) || 0
+            };
+        }
+
+        function updateTransform(img, state) {
+            img.dataset.scale = state.scale;
+            img.dataset.rotate = state.rotate;
+            img.dataset.panX = state.panX;
+            img.dataset.panY = state.panY;
+            img.style.transform = `translate(${state.panX}px, ${state.panY}px) rotate(${state.rotate}deg) scale(${state.scale})`;
+            // Always show grab cursor to indicate panning is possible, unless actively grabbing
+            img.style.cursor = 'grab';
+        }
+
+        function changeZoom(id, delta) {
+            const img = document.getElementById(id);
+            if (img) {
+                const s = getTransformState(img);
+                const newScale = Math.min(Math.max(0.5, s.scale + delta), 5);
+                s.scale = newScale;
+                updateTransform(img, s);
+            }
+        }
+
+        function rotate(id, deg) {
+            const img = document.getElementById(id);
+            if (!img) return;
+            const s = getTransformState(img);
+            s.rotate += deg;
+            updateTransform(img, s);
+        }
+
+        function applyZoom(id, val) {
+            const img = document.getElementById(id);
+            if (img) {
+                const s = getTransformState(img);
+                s.scale = Math.min(Math.max(0.5, val), 5);
+                updateTransform(img, s);
+            }
+        }
+
+        function resetZoom(id) {
+            const img = document.getElementById(id);
+            if (img) {
+                updateTransform(img, { scale: 1, rotate: 0, panX: 0, panY: 0 });
+            }
+        }
+
+        // Pan / Drag Implementation
+        function setupDraggable(containerId) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+
+            let isDragging = false;
+            let startX, startY;
+            let initialPanX, initialPanY;
+
+            container.addEventListener('mousedown', e => {
+                const img = container.querySelector('img');
+                if (!img) return;
+                const s = getTransformState(img);
+                // Removed scale check to allow panning even at 1x if image is larger than container
+                // if (s.scale <= 1) return; 
+
+                isDragging = true;
+                startX = e.clientX;
+                startY = e.clientY;
+                initialPanX = s.panX;
+                initialPanY = s.panY;
+                container.style.cursor = 'grabbing';
+                img.style.cursor = 'grabbing';
+                e.preventDefault();
+            });
+
+            window.addEventListener('mousemove', e => {
+                if (!isDragging) return;
+                const img = container.querySelector('img');
+                if (!img) return;
+
+                const dx = e.clientX - startX;
+                const dy = e.clientY - startY;
+
+                const s = getTransformState(img);
+                s.panX = initialPanX + dx;
+                s.panY = initialPanY + dy;
+                updateTransform(img, s);
+            });
+
+            window.addEventListener('mouseup', () => {
+                if (isDragging) {
+                    isDragging = false;
+                    container.style.cursor = 'default';
+                    const img = container.querySelector('img');
+                    if (img) img.style.cursor = 'grab';
+                }
+            });
+        }
+
+        // Initialize Drag for both viewers
+        document.addEventListener('DOMContentLoaded', () => {
+            try { updateCalculations(); } catch (e) { console.error("Error updating calculations:", e); }
+            try { setupDraggable('viewer-trep'); } catch (e) { console.error("Error setupDraggable trep:", e); }
+            try { setupDraggable('viewer-esc'); } catch (e) { console.error("Error setupDraggable esc:", e); }
+        });
+
+
+
+        async function commitSave(silent = false) {
+            if (!ID_TREP && !ID_ESC) return;
+            const edits = [];
+            document.querySelectorAll('.editable').forEach(el => {
+                let val = parseInt(el.value) || 0;
+                // data-source default to TREP (legacy compatibility)
+                let source = el.dataset.source || 'TREP';
+                edits.push({
+                    type: el.dataset.type,
+                    key: el.dataset.key,
+                    votos: val,
+                    source: source
+                });
+            });
+
+            for (const item of edits) {
+                let action = (item.type === 'special' || item.type === 'resumen') ? 'update_resumen' : 'update_vote';
+                let targetId = (item.source === 'OFICIAL') ? ID_ESC : ID_TREP;
+
+                if (!targetId) continue;
+
+                await fetch('/api/update_results', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action, id_acta: targetId, key: item.key, votos: item.votos })
+                });
+            }
+            hasUnsavedChanges = false;
+            if (!silent) {
+                const s = document.getElementById('save-status');
+                if (s) {
+                    s.innerText = "Todo guardado";
+                    s.classList.add('text-slate-500', 'italic');
+                    s.classList.remove('text-yellow-500', 'font-bold', 'animate-pulse');
+                }
+            }
+        }
+
+        async function saveChangesUI() {
+            const btn = document.getElementById('btn-save');
+            if (!btn) return;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="ph ph-spinner animate-spin"></i> Guardando...';
+            btn.disabled = true;
+            try {
+                await commitSave();
+                btn.innerHTML = '<i class="ph ph-check"></i> GUARDADO';
+                btn.classList.replace('bg-indigo-600', 'bg-green-600');
+                setTimeout(() => {
+                    btn.innerHTML = originalText;
+                    btn.classList.replace('bg-green-600', 'bg-indigo-600');
+                    btn.disabled = false;
+                }, 1000);
+            } catch (e) { alert("Error al guardar"); btn.disabled = false; btn.innerHTML = originalText; }
+        }
+
+        async function validateAndNext() {
+            if (hasUnsavedChanges) {
+                if (confirm("Tienes cambios sin guardar. ¿Guardar antes de continuar?")) {
+                    await commitSave(true);
+                } else return;
+            }
+            const btn = document.getElementById('btn-validate');
+            if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ph ph-spinner animate-spin"></i> ...'; }
+
+            try {
+                const res = await fetch('/api/validate_jrv', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ jrv: '{{ jrv }}', level: '{{ level }}' })
+                });
+                const json = await res.json();
+                if (json.success) {
+                    if (json.next_jrv) window.location.href = "/comparison/" + json.next_jrv + "?level={{ level }}";
+                    else window.location.href = "/";
+                } else {
+                    alert("Error: " + json.message);
+                    if (btn) { btn.disabled = false; btn.innerHTML = 'VALIDAR Y SIGUIENTE <i class="ph ph-arrow-right text-lg"></i>'; }
+                }
+            } catch (e) { alert("Connection Error"); if (btn) btn.disabled = false; }
+        }
+
+        // Mouse Wheel Zoom
+        document.querySelectorAll('.image-viewer').forEach(c => {
+            c.addEventListener('wheel', e => {
+                e.preventDefault(); // Prevent page scroll
+                const img = c.querySelector('img');
+                if (img) {
+                    // Adjust sensitivity: -0.001 might be too slow or fast depending on the mouse
+                    // Standard deltaY is usually around 100 per notch.
+                    const delta = e.deltaY * -0.001;
+                    changeZoom(img.id, delta);
+                }
+            }, { passive: false });
+        });
+
+        // Enter Key Navigation for Inputs
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                const target = e.target;
+                if (target.tagName === 'INPUT' && target.type === 'number') {
+                    e.preventDefault();
+
+                    // Find all number inputs
+                    const inputs = Array.from(document.querySelectorAll('input[type="number"]'));
+                    const index = inputs.indexOf(target);
+
+                    // Logic to find the "input below"
+                    // The inputs are rendered row by row. 
+                    // Layout: [Row 1 Col A] [Row 1 Col B] ... [Row 1 Col N]
+                    //         [Row 2 Col A] [Row 2 Col B] ... 
+
+                    // For Diputados Matrix:
+                    // It's a table. Rows are 'tr'. 
+                    // Inside 'tr', we have multiple 'td's. 
+                    // Inside 'td', we have 2 inputs (FRENAEL and OFICIAL) side-by-side.
+
+                    // If I am in Row X, Col Y, Input Side (Left/Right)
+                    // I want to go to Row X+1, Col Y, Input Side (Left/Right)
+
+                    // Simpler approach: 
+                    // 1. Get current row and input index within row? 
+                    // 2. Or, since the DOM order is: Row 1 (all cells), Row 2 (all cells).
+                    // If we want to go "Down", we need to skip the other cells in the current row.
+
+                    // Let's rely on the grid structure.
+                    // Identify the column index of the parent TD and whether it's the 1st or 2nd input in that TD.
+
+                    const cell = target.closest('td');
+                    const row = target.closest('tr');
+
+                    if (cell && row) {
+                        const cellIndex = Array.from(row.children).indexOf(cell);
+                        const inputIndexInCell = Array.from(cell.querySelectorAll('input')).indexOf(target);
+
+                        const nextRow = row.nextElementSibling;
+                        if (nextRow) {
+                            const nextCell = nextRow.children[cellIndex];
+                            if (nextCell) {
+                                const nextInputs = nextCell.querySelectorAll('input');
+                                if (nextInputs.length > inputIndexInCell) {
+                                    nextInputs[inputIndexInCell].focus();
+                                    nextInputs[inputIndexInCell].select();
+                                    return;
+                                }
+                            }
+                        }
+                    }
+
+                    // Fallback: just go to next input in DOM order (Tab-like behavior) if "down" logic fails or end of column?
+                    // User asked "move to the casilla de abajo" (cell below).
+                    // If at bottom, maybe do nothing or go to next column top? 
+                    // Sticking to "cell below" logic above.
+                }
+            }
+        });
+
+        // Manual Upload & Delete Logic
+        function triggerUpload(source) {
+            const inputId = source === 'TREP' ? 'file-trep' : 'file-esc';
+            document.getElementById(inputId).click();
+        }
+
+        async function uploadActa(source) {
+            const inputId = source === 'TREP' ? 'file-trep' : 'file-esc';
+            const fileInput = document.getElementById(inputId);
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('jrv', '{{ jrv }}');
+            formData.append('nivel', '{{ level }}');
+            formData.append('source', source);
+            formData.append('file', file);
+
+            try {
+                // Show loading indicator?
+                const res = await fetch('/api/upload_acta', { method: 'POST', body: formData });
+                const json = await res.json();
+                if (json.success) {
+                    window.location.reload();
+                } else {
+                    alert('Error subiendo acta: ' + json.message);
+                }
+            } catch (e) { alert("Error de conexión"); }
+        }
+
+        async function deleteActa(source) {
+            if (!confirm(`¿Estás seguro de ELIMINAR el acta de ${source}? Esta acción forzará los valores a CERO.`)) return;
+
+            try {
+                const res = await fetch('/api/delete_acta', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ jrv: '{{ jrv }}', nivel: '{{ level }}', source: source })
+                });
+                const json = await res.json();
+                if (json.success) {
+                    window.location.reload();
+                } else {
+                    alert('Error eliminando acta: ' + json.message);
+                }
+            } catch (e) { alert("Error de conexión"); }
+        }
+
+    </script>
+</body>
+
+</html>

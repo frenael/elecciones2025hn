@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Observacion Electoral FRENAL - Honduras 2025</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <style type="text/tailwindcss">
+        .pagination-btn {
+            @apply px-3 py-1 border rounded text-sm font-medium transition-colors;
+        }
+
+        .pagination-btn.active {
+            @apply bg-blue-600 text-white border-blue-600;
+        }
+
+        .pagination-btn:not(.active):not(:disabled) {
+            @apply bg-white text-gray-700 hover:bg-gray-50;
+        }
+
+        .pagination-btn:disabled {
+            @apply bg-gray-100 text-gray-400 cursor-not-allowed;
+        }
+
+        .diff-pos {
+            color: #166534;
+            font-weight: bold;
+        }
+
+        .diff-neg {
+            color: #dc2626;
+            font-weight: bold;
+        }
+
+        .diff-zero {
+            color: #9ca3af;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-100 text-gray-800">
+    <div class="max-w-7xl mx-auto p-6">
+
+        <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+            <div>
+                <h1 class="text-3xl font-bold text-blue-900 flex items-center gap-2">
+                    <i class="ph ph-check-square-offset"></i> Observacion Electoral FRENAL - Honduras 2025
+                </h1>
+                <a href="/comparison/35"
+                    class="text-indigo-600 hover:text-indigo-800 font-semibold mt-1 inline-flex items-center gap-1 hover:underline text-sm">
+                    <i class="ph ph-eye"></i> Ver comparativo de actas observadas
+                </a>
+            </div>
+
+            <div class="flex items-center gap-2 bg-white p-2 rounded-xl shadow-sm border border-gray-200">
+
+
+            </div>
+        </div>
+
+        <!-- Estadísticas de Actas (AQUÍ ESTÁN) -->
+        <div class="grid grid-cols-3 gap-4 mb-6">
+            <div class="bg-white p-4 rounded-lg shadow border-l-4 border-blue-500 relative overflow-hidden">
+                <div class="text-gray-500 text-sm font-semibold uppercase relative z-10">Total Actas</div>
+                <div class="text-3xl font-bold text-slate-800 relative z-10">{{ total }}</div>
+            </div>
+            <div class="bg-white p-4 rounded-lg shadow border-l-4 border-yellow-500 relative overflow-hidden">
+                <div class="text-gray-500 text-sm font-semibold uppercase relative z-10">Pendientes</div>
+                <div class="text-3xl font-bold text-yellow-600 relative z-10">{{ pending }}</div>
+            </div>
+            <div class="bg-white p-4 rounded-lg shadow border-l-4 border-green-500 relative overflow-hidden">
+                <div class="text-gray-500 text-sm font-semibold uppercase relative z-10">Validadas</div>
+                <div class="text-3xl font-bold text-green-600 relative z-10">{{ validated }}</div>
+            </div>
+        </div>
+
+        <!-- Resultados Globales -->
+        <!-- Resultados Globales por Nivel -->
+        {% for level, level_data in stats.items() %}
+        <div class="mb-8">
+            <h2 class="text-lg font-bold text-slate-700 mb-3 flex items-center gap-2">
+                <i class="ph ph-chart-bar"></i> Resultados Consolidados - {{ level }}
+                <span class="text-sm font-normal text-gray-500 ml-2">
+                    (Actas: {{ level_data.trep.actas }} FRENAEL | {{ level_data.esc.actas }} Oficial)
+                </span>
+            </h2>
+            <div class="grid grid-cols-4 gap-4">
+                {% for partido, color, icon in [('nacional', 'blue', 'star'), ('liberal', 'red', 'flag'), ('libre',
+                'red', 'hand-fist'), ('otros', 'gray', 'users-three')] %}
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-{{color}}-100 relative overflow-hidden">
+                    <div class="absolute top-0 right-0 p-2 opacity-10"><i
+                            class="ph ph-{{icon}} text-6xl text-{{color}}-800"></i></div>
+                    <div class="text-xs font-bold text-{{color}}-900 uppercase mb-3">{{ partido }}</div>
+                    <div class="grid grid-cols-2 gap-4 border-t pt-2">
+                        <div>
+                            <div class="text-[10px] font-bold text-gray-400 uppercase">FRENAEL</div>
+                            <div class="text-xl font-bold text-slate-800">{{
+                                "{:,}".format(level_data.trep[partido].votos) }}</div>
+                            <div class="text-xs font-bold text-{{color}}-600">{{ level_data.trep[partido].pct }}%</div>
+                        </div>
+                        <div class="border-l pl-4">
+                            <div class="text-[10px] font-bold text-gray-400 uppercase">OFICIAL</div>
+                            <div class="text-xl font-bold text-slate-800">{{
+                                "{:,}".format(level_data.esc[partido].votos) }}</div>
+                            <div class="text-xs font-bold text-green-600">{{ level_data.esc[partido].pct }}%</div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="mt-2 text-right text-xs text-gray-400 font-mono">
+                Total Votos Procesados: <b>{{ "{:,}".format(level_data.trep.total) }}</b> (FRENAEL) | <b>{{
+                    "{:,}".format(level_data.esc.total) }}</b>
+                (Oficial)
+            </div>
+        </div>
+        {% endfor %}
+
+        <div id="terminal-container" class="hidden mb-6">
+            <div class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm h-48 overflow-y-auto shadow-inner"
+                id="terminal">
+                > Inicializando...<br>
+            </div>
+        </div>
+
+        <!-- DETAILED COMPARISON SECTION -->
+        <div class="mb-8">
+            <h2 class="text-lg font-bold text-slate-700 mb-3 flex items-center gap-2">
+                <i class="ph ph-table"></i> Comparativo Detallado por JRV
+            </h2>
+
+            <!-- Tabs -->
+            <div class="flex space-x-2 mb-4">
+                <button onclick="loadDetailedTable('PRESIDENTE')" id="tab-pres"
+                    class="tab-btn px-4 py-2 rounded-lg font-bold text-sm bg-blue-600 text-white shadow transition-colors">Presidente</button>
+                <button onclick="loadDetailedTable('ALCALDE')" id="tab-alc"
+                    class="tab-btn px-4 py-2 rounded-lg font-bold text-sm bg-gray-200 text-gray-600 hover:bg-gray-300 transition-colors">Alcalde</button>
+                <button onclick="loadDetailedTable('DIPUTADOS')" id="tab-dip"
+                    class="tab-btn px-4 py-2 rounded-lg font-bold text-sm bg-gray-200 text-gray-600 hover:bg-gray-300 transition-colors">Diputados</button>
+            </div>
+
+            <!-- Table Container -->
+            <div class="bg-white rounded-lg shadow overflow-hidden flex flex-col max-h-[600px]">
+                <div class="overflow-auto relative" id="detailed-table-wrapper">
+                    <div class="p-8 text-center text-gray-500">
+                        <i class="ph ph-arrow-circle-up text-2xl mb-2"></i><br>
+                        Seleccione un nivel para ver el detalle...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+
+        <script>
+            document.addEventListener('DOMContentLoaded', () => {
+                // Load Detailed Table initial state
+                loadDetailedTable('PRESIDENTE');
+            });
+
+
+
+            let currentDetailLevel = 'PRESIDENTE';
+
+            async function loadDetailedTable(level) {
+                currentDetailLevel = level;
+                // UI Update
+                document.querySelectorAll('.tab-btn').forEach(b => {
+                    b.classList.remove('bg-blue-600', 'text-white', 'shadow');
+                    b.classList.add('bg-gray-200', 'text-gray-600');
+                });
+                const activeBtn = document.getElementById(level === 'PRESIDENTE' ? 'tab-pres' : level === 'DIPUTADOS' ? 'tab-dip' : 'tab-alc');
+                if (activeBtn) {
+                    activeBtn.classList.remove('bg-gray-200', 'text-gray-600');
+                    activeBtn.classList.add('bg-blue-600', 'text-white', 'shadow');
+                }
+
+                const container = document.getElementById('detailed-table-wrapper');
+                container.innerHTML = '<div class="p-8 text-center text-gray-500"><i class="ph ph-spinner animate-spin text-2xl"></i> Cargando...</div>';
+
+                try {
+                    const res = await fetch(`/api/summary_table/${level}`);
+                    const json = await res.json();
+
+                    if (json.error) {
+                        container.innerHTML = `<div class="p-4 text-red-500">Error: ${json.error}</div>`;
+                        return;
+                    }
+
+                    if (json.data.length === 0) {
+                        container.innerHTML = `<div class="p-8 text-center text-gray-500">No hay datos disponibles para este nivel.</div>`;
+                        return;
+                    }
+
+                    renderDetailedTable(json);
+                } catch (e) {
+                    container.innerHTML = `<div class="p-4 text-red-500">Error de conexión: ${e}</div>`;
+                }
+            }
+
+            function renderDetailedTable(data) {
+                const container = document.getElementById('detailed-table-wrapper');
+                const columns = data.columns;
+                const rows = data.data;
+
+                let html = '<table class="w-full text-left border-collapse text-xs">';
+
+                // Header
+                html += '<thead class="bg-gray-100 font-bold text-gray-700 sticky top-0 z-10 shadow-sm">';
+                html += '<tr>';
+                html += '<th class="p-2 border sticky left-0 bg-gray-100 z-20 w-16 text-center">JRV</th>';
+
+                columns.forEach(col => {
+                    html += `<th class="p-2 border text-center" colspan="3">${col}</th>`;
+                });
+                html += '</tr>';
+
+                // Sub-header
+                html += '<tr>';
+                html += '<th class="p-1 border sticky left-0 bg-gray-100 z-20"></th>';
+                columns.forEach(col => {
+                    html += '<th class="p-1 border text-center text-[10px] w-12 bg-gray-50">CNE</th>';
+                    html += '<th class="p-1 border text-center text-[10px] w-12 bg-blue-50 text-blue-700">FRE</th>';
+                    html += '<th class="p-1 border text-center text-[10px] w-10">DIF</th>';
+                });
+                html += '</tr>';
+                html += '</thead>';
+
+                // Body
+                html += '<tbody>';
+                rows.forEach(row => {
+                    html += '<tr class="hover:bg-gray-50 border-b">';
+                    html += `<td class="p-2 border font-bold sticky left-0 bg-white z-10 text-center"><a href="/comparison/${row.jrv}?level=${currentDetailLevel}" class="text-blue-600 hover:underline">${row.jrv}</a></td>`;
+
+                    row.results.forEach(res => {
+                        // CNE
+                        html += `<td class="p-1 border text-center font-mono">${res.esc.toLocaleString()}</td>`;
+                        // FRENAEL
+                        html += `<td class="p-1 border text-center font-mono text-blue-700 bg-blue-50/30">${res.trep.toLocaleString()}</td>`;
+                        // DIFF
+                        const diffClass = res.diff === 0 ? 'text-green-600 font-bold' : 'bg-red-100 text-red-800 font-bold';
+                        html += `<td class="p-1 border text-center font-mono"><span class="px-1 rounded ${diffClass}">${res.diff}</span></td>`;
+                    });
+
+                    html += '</tr>';
+                });
+                html += '</tbody></table>';
+
+                container.innerHTML = html;
+            }
+
+
+
+
+
+            async function deleteJRV(jrv) {
+                if (!confirm(`¿ELIMINAR DEFINITIVAMENTE la JRV ${jrv}?`)) return;
+                try {
+                    const res = await fetch('/api/delete_jrv', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id_jrv: jrv })
+                    });
+                    if ((await res.json()).success) location.reload();
+                } catch (e) { alert("Error"); }
+            }
+        </script>
+</body>
+
+</html>
