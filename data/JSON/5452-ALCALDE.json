@@ -1,0 +1,49 @@
+{
+  "resultados": [
+    {
+      "partido": "PARTIDO LIBERTAD Y REFUNDACION",
+      "candidato": "PARTIDO LIBERTAD Y REFUNDACION ",
+      "votos": "120",
+      "porcentaje": "61.22"
+    },
+    {
+      "partido": "PARTIDO LIBERAL DE HONDURAS",
+      "candidato": "PARTIDO LIBERAL DE HONDURAS ",
+      "votos": "55",
+      "porcentaje": "28.06"
+    },
+    {
+      "partido": "PARTIDO NACIONAL DE HONDURAS",
+      "candidato": "PARTIDO NACIONAL DE HONDURAS ",
+      "votos": "16",
+      "porcentaje": "8.16"
+    },
+    {
+      "partido": "PARTIDO INNOVACION Y UNIDAD SOCIAL DEMOCRATA",
+      "candidato": "PARTIDO INNOVACION Y UNIDAD SOCIAL DEMOCRATA ",
+      "votos": "4",
+      "porcentaje": "2.04"
+    },
+    {
+      "partido": "PARTIDO DEMOCRATA CRISTIANO DE HONDURAS",
+      "candidato": "PARTIDO DEMOCRATA CRISTIANO DE HONDURAS ",
+      "votos": "1",
+      "porcentaje": "0.51"
+    }
+  ],
+  "estadisticas": {
+    "totalizacion_actas": {
+      "actas_totales": "1",
+      "actas_divulgadas": "1"
+    },
+    "distribucion_votos": {
+      "validos": "196",
+      "nulos": "2",
+      "blancos": "1"
+    },
+    "estado_actas_divulgadas": {
+      "actas_correctas": "1",
+      "actas_inconsistentes": "0"
+    }
+  }
+}
