@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <html lang="es">
+{% set readonly = readonly | default(False) %}
 
 <head>
     <meta charset="UTF-8">
-    <title>Observacion Electoral FRENAL - Honduras 2025</title>
+    <title>FRENAL: Observación Elecciones Generales Honduras 2025</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
     <style type="text/tailwindcss">
@@ -37,6 +38,9 @@
             color: #9ca3af;
         }
     </style>
+    <script>
+        const IS_READONLY = {{ 'true' if readonly else 'false' }};
+    </script>
 </head>
 
 <body class="bg-gray-100 text-gray-800">
@@ -45,77 +49,86 @@
         <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
             <div>
                 <h1 class="text-3xl font-bold text-blue-900 flex items-center gap-2">
-                    <i class="ph ph-check-square-offset"></i> Observacion Electoral FRENAL - Honduras 2025
+                    <i class="ph ph-check-square-offset"></i> FRENAL: Observación Elecciones Generales Honduras 2025
                 </h1>
-                <a href="/comparison/35"
+                <a href="{{ '/public' if readonly else '' }}/comparison/35"
                     class="text-indigo-600 hover:text-indigo-800 font-semibold mt-1 inline-flex items-center gap-1 hover:underline text-sm">
-                    <i class="ph ph-eye"></i> Ver comparativo de actas observadas
+                    <i class="ph ph-eye"></i> Ver comparativo de actas
                 </a>
             </div>
 
             <div class="flex items-center gap-2 bg-white p-2 rounded-xl shadow-sm border border-gray-200">
-
-
-            </div>
-        </div>
-
-        <!-- Estadísticas de Actas (AQUÍ ESTÁN) -->
-        <div class="grid grid-cols-3 gap-4 mb-6">
-            <div class="bg-white p-4 rounded-lg shadow border-l-4 border-blue-500 relative overflow-hidden">
-                <div class="text-gray-500 text-sm font-semibold uppercase relative z-10">Total Actas</div>
-                <div class="text-3xl font-bold text-slate-800 relative z-10">{{ total }}</div>
-            </div>
-            <div class="bg-white p-4 rounded-lg shadow border-l-4 border-yellow-500 relative overflow-hidden">
-                <div class="text-gray-500 text-sm font-semibold uppercase relative z-10">Pendientes</div>
-                <div class="text-3xl font-bold text-yellow-600 relative z-10">{{ pending }}</div>
-            </div>
-            <div class="bg-white p-4 rounded-lg shadow border-l-4 border-green-500 relative overflow-hidden">
-                <div class="text-gray-500 text-sm font-semibold uppercase relative z-10">Validadas</div>
-                <div class="text-3xl font-bold text-green-600 relative z-10">{{ validated }}</div>
-            </div>
-        </div>
-
-        <!-- Resultados Globales -->
-        <!-- Resultados Globales por Nivel -->
-        {% for level, level_data in stats.items() %}
-        <div class="mb-8">
-            <h2 class="text-lg font-bold text-slate-700 mb-3 flex items-center gap-2">
-                <i class="ph ph-chart-bar"></i> Resultados Consolidados - {{ level }}
-                <span class="text-sm font-normal text-gray-500 ml-2">
-                    (Actas: {{ level_data.trep.actas }} FRENAEL | {{ level_data.esc.actas }} Oficial)
+                {% if not readonly %}
+                <a href="/public/"
+                    class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow-sm transition-colors"
+                    title="Ver Vista Pública">
+                    <i class="ph ph-globe"></i> Ver Vista Pública
+                </a>
+                {% else %}
+                <span class="text-sm font-bold text-gray-500 flex items-center gap-2 px-2">
+                    <i class="ph ph-eye"></i> VISTA PÚBLICA
                 </span>
-            </h2>
-            <div class="grid grid-cols-4 gap-4">
-                {% for partido, color, icon in [('nacional', 'blue', 'star'), ('liberal', 'red', 'flag'), ('libre',
-                'red', 'hand-fist'), ('otros', 'gray', 'users-three')] %}
-                <div class="bg-white p-4 rounded-xl shadow-sm border border-{{color}}-100 relative overflow-hidden">
-                    <div class="absolute top-0 right-0 p-2 opacity-10"><i
-                            class="ph ph-{{icon}} text-6xl text-{{color}}-800"></i></div>
-                    <div class="text-xs font-bold text-{{color}}-900 uppercase mb-3">{{ partido }}</div>
-                    <div class="grid grid-cols-2 gap-4 border-t pt-2">
-                        <div>
-                            <div class="text-[10px] font-bold text-gray-400 uppercase">FRENAEL</div>
-                            <div class="text-xl font-bold text-slate-800">{{
-                                "{:,}".format(level_data.trep[partido].votos) }}</div>
-                            <div class="text-xs font-bold text-{{color}}-600">{{ level_data.trep[partido].pct }}%</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Estadísticas de Actas -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <!-- Total Actas -->
+            <div class="bg-white rounded-xl shadow border-l-4 border-blue-500 overflow-hidden">
+                <div class="p-4 border-b border-gray-100 bg-gray-50">
+                    <div class="text-xs font-bold text-gray-500 uppercase tracking-wider">Actas Procesadas</div>
+                </div>
+                <div class="p-4">
+                    <div class="text-3xl font-bold text-slate-800 mb-4">{{ total }}</div>
+                    <div class="space-y-3 pt-3 border-t border-gray-100">
+                        {% for lvl, data in level_stats_cards.items() %}
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm font-medium text-gray-600">{{ lvl }}</span>
+                            <span class="text-lg font-bold text-blue-900">{{ data.total }}</span>
                         </div>
-                        <div class="border-l pl-4">
-                            <div class="text-[10px] font-bold text-gray-400 uppercase">OFICIAL</div>
-                            <div class="text-xl font-bold text-slate-800">{{
-                                "{:,}".format(level_data.esc[partido].votos) }}</div>
-                            <div class="text-xs font-bold text-green-600">{{ level_data.esc[partido].pct }}%</div>
-                        </div>
+                        {% endfor %}
                     </div>
                 </div>
-                {% endfor %}
             </div>
-            <div class="mt-2 text-right text-xs text-gray-400 font-mono">
-                Total Votos Procesados: <b>{{ "{:,}".format(level_data.trep.total) }}</b> (FRENAEL) | <b>{{
-                    "{:,}".format(level_data.esc.total) }}</b>
-                (Oficial)
+
+            <!-- Pendientes -->
+            <div class="bg-white rounded-xl shadow border-l-4 border-yellow-500 overflow-hidden">
+                <div class="p-4 border-b border-gray-100 bg-gray-50">
+                    <div class="text-xs font-bold text-gray-500 uppercase tracking-wider">Actas Pendientes de Validar
+                    </div>
+                </div>
+                <div class="p-4">
+                    <div class="text-3xl font-bold text-yellow-600 mb-4">{{ pending }}</div>
+                    <div class="space-y-3 pt-3 border-t border-gray-100">
+                        {% for lvl, data in level_stats_cards.items() %}
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm font-medium text-gray-600">{{ lvl }}</span>
+                            <span class="text-lg font-bold text-yellow-600">{{ data.pending }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Validadas -->
+            <div class="bg-white rounded-xl shadow border-l-4 border-green-500 overflow-hidden">
+                <div class="p-4 border-b border-gray-100 bg-gray-50">
+                    <div class="text-xs font-bold text-gray-500 uppercase tracking-wider">Actas validadas</div>
+                </div>
+                <div class="p-4">
+                    <div class="text-3xl font-bold text-green-600 mb-4">{{ validated }}</div>
+                    <div class="space-y-3 pt-3 border-t border-gray-100">
+                        {% for lvl, data in level_stats_cards.items() %}
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm font-medium text-gray-600">{{ lvl }}</span>
+                            <span class="text-lg font-bold text-green-600">{{ data.validated }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
             </div>
         </div>
-        {% endfor %}
 
         <div id="terminal-container" class="hidden mb-6">
             <div class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm h-48 overflow-y-auto shadow-inner"
@@ -152,119 +165,203 @@
         </div>
 
 
+        <!-- Resultados Globales -->
+        <!-- Resultados Globales por Nivel -->
+        {% for level, level_data in stats.items() %}
+        <div class="mb-8">
+            <h2 class="text-lg font-bold text-slate-700 mb-3 flex items-center gap-2">
+                <i class="ph ph-chart-bar"></i> Resultados Consolidados - {{ level }}
+            </h2>
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+                {% for p in level_data.parties %}
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-{{p.color}}-100 relative overflow-hidden">
+                    <div class="absolute top-0 right-0 p-2 opacity-10"><i
+                            class="ph ph-{{p.icon}} text-6xl text-{{p.color}}-800"></i></div>
+                    <div class="text-xs font-bold text-{{p.color}}-900 uppercase mb-3 truncate" title="{{ p.name }}">{{
+                        p.name }}</div>
+                    <div class="grid grid-cols-2 gap-4 border-t pt-2">
+                        <div>
+                            <div class="text-[10px] font-bold text-gray-400 uppercase">FRENAEL</div>
+                            <div class="text-xl font-bold text-slate-800">{{ "{:,}".format(p.trep.votos) }}</div>
+                            <div class="text-xs font-bold text-{{p.color}}-600">{{ p.trep.pct }}%</div>
+                        </div>
+                        <div class="border-l pl-4">
+                            <div class="text-[10px] font-bold text-gray-400 uppercase">OFICIAL</div>
+                            <div class="text-xl font-bold text-slate-800">{{ "{:,}".format(p.esc.votos) }}</div>
+                            <div class="text-xs font-bold text-green-600">{{ p.esc.pct }}%</div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="mt-2 text-right text-xs text-gray-400 font-mono">
+            Total Votos Procesados: <b>{{ "{:,}".format(level_data.trep.total) }}</b> (FRENAEL) | <b>{{
+                "{:,}".format(level_data.esc.total) }}</b>
+            (Oficial)
+        </div>
+        {% endfor %}
 
-        <script>
-            document.addEventListener('DOMContentLoaded', () => {
-                // Load Detailed Table initial state
-                loadDetailedTable('PRESIDENTE');
+
+
+    </div><!-- End Max Width Container -->
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Load Detailed Table initial state
+            loadDetailedTable('PRESIDENTE');
+        });
+
+
+
+        let currentDetailLevel = 'PRESIDENTE';
+
+        async function loadDetailedTable(level) {
+            currentDetailLevel = level;
+            // UI Update
+            document.querySelectorAll('.tab-btn').forEach(b => {
+                b.classList.remove('bg-blue-600', 'text-white', 'shadow');
+                b.classList.add('bg-gray-200', 'text-gray-600');
             });
+            const activeBtn = document.getElementById(level === 'PRESIDENTE' ? 'tab-pres' : level === 'DIPUTADOS' ? 'tab-dip' : 'tab-alc');
+            if (activeBtn) {
+                activeBtn.classList.remove('bg-gray-200', 'text-gray-600');
+                activeBtn.classList.add('bg-blue-600', 'text-white', 'shadow');
+            }
 
+            const container = document.getElementById('detailed-table-wrapper');
+            container.innerHTML = '<div class="p-8 text-center text-gray-500"><i class="ph ph-spinner animate-spin text-2xl"></i> Cargando...</div>';
 
+            try {
+                const res = await fetch(`/api/summary_table/${level}`);
+                const json = await res.json();
 
-            let currentDetailLevel = 'PRESIDENTE';
-
-            async function loadDetailedTable(level) {
-                currentDetailLevel = level;
-                // UI Update
-                document.querySelectorAll('.tab-btn').forEach(b => {
-                    b.classList.remove('bg-blue-600', 'text-white', 'shadow');
-                    b.classList.add('bg-gray-200', 'text-gray-600');
-                });
-                const activeBtn = document.getElementById(level === 'PRESIDENTE' ? 'tab-pres' : level === 'DIPUTADOS' ? 'tab-dip' : 'tab-alc');
-                if (activeBtn) {
-                    activeBtn.classList.remove('bg-gray-200', 'text-gray-600');
-                    activeBtn.classList.add('bg-blue-600', 'text-white', 'shadow');
+                if (json.error) {
+                    container.innerHTML = `<div class="p-4 text-red-500">Error: ${json.error}</div>`;
+                    return;
                 }
 
-                const container = document.getElementById('detailed-table-wrapper');
-                container.innerHTML = '<div class="p-8 text-center text-gray-500"><i class="ph ph-spinner animate-spin text-2xl"></i> Cargando...</div>';
-
-                try {
-                    const res = await fetch(`/api/summary_table/${level}`);
-                    const json = await res.json();
-
-                    if (json.error) {
-                        container.innerHTML = `<div class="p-4 text-red-500">Error: ${json.error}</div>`;
-                        return;
-                    }
-
-                    if (json.data.length === 0) {
-                        container.innerHTML = `<div class="p-8 text-center text-gray-500">No hay datos disponibles para este nivel.</div>`;
-                        return;
-                    }
-
-                    renderDetailedTable(json);
-                } catch (e) {
-                    container.innerHTML = `<div class="p-4 text-red-500">Error de conexión: ${e}</div>`;
+                if (json.data.length === 0) {
+                    container.innerHTML = `<div class="p-8 text-center text-gray-500">No hay datos disponibles para este nivel.</div>`;
+                    return;
                 }
+
+                renderDetailedTable(json);
+            } catch (e) {
+                container.innerHTML = `<div class="p-4 text-red-500">Error de conexión: ${e}</div>`;
             }
+        }
 
-            function renderDetailedTable(data) {
-                const container = document.getElementById('detailed-table-wrapper');
-                const columns = data.columns;
-                const rows = data.data;
+        function renderDetailedTable(data) {
+            const container = document.getElementById('detailed-table-wrapper');
+            // Filter out OTROS from columns if present
+            const columns = data.columns.filter(c => c !== 'OTROS');
+            const rows = data.data;
 
-                let html = '<table class="w-full text-left border-collapse text-xs">';
+            let html = '';
+            html += '<table class="w-full text-left border-collapse text-xs">';
 
-                // Header
-                html += '<thead class="bg-gray-100 font-bold text-gray-700 sticky top-0 z-10 shadow-sm">';
-                html += '<tr>';
-                html += '<th class="p-2 border sticky left-0 bg-gray-100 z-20 w-16 text-center">JRV</th>';
+            // Header
+            html += '<thead class="bg-gray-100 font-bold text-gray-700 shadow-sm">';
+            html += '<tr>';
+            // Corner Headers (Fixed Top-Left)
+            // No. (Width 40px)
+            html += '<th class="p-2 border sticky left-0 top-0 bg-gray-100 z-50 text-center" style="width: 40px; min-width: 40px;" rowspan="2">No.</th>';
+            // JRV (Width 64px - left 40px)
+            html += '<th class="p-2 border sticky top-0 bg-gray-100 z-50 text-center" style="left: 40px; width: 64px; min-width: 64px;" rowspan="2">JRV</th>';
+            // NEW: Participation Column
+            html += '<th class="p-2 border sticky top-0 bg-gray-100 z-50 text-center" style="left: 104px; width: 80px; min-width: 80px;" rowspan="2">% Partic.</th>';
+
+            // Party Headers (Fixed Top)
+            // Height approx 36px
+            columns.forEach(col => {
+                html += `<th class="p-2 border text-center sticky top-0 bg-gray-100 z-40 ${col.class}" colspan="3" style="height: 36px;">${col.name}</th>`;
+            });
+            html += '</tr>';
+
+            // Sub-header
+            html += '<tr>';
+            // Empty cells removed (covered by rowspan)
+            columns.forEach(col => {
+                // Fixed Top (below Party Header) - Offset 36px
+                html += '<th class="p-1 border text-center text-[10px] w-12 bg-blue-50 text-blue-700 sticky z-40" style="top: 36px;">FRENAEL</th>';
+                html += '<th class="p-1 border text-center text-[10px] w-12 bg-gray-50 sticky z-40" style="top: 36px;">CNE</th>';
+                html += '<th class="p-1 border text-center text-[10px] w-10 sticky bg-white z-40" style="top: 36px;">DIF</th>';
+            });
+            html += '</tr>';
+            html += '</thead>';
+
+            // Body
+            html += '<tbody>';
+            rows.forEach((row, index) => {
+                // Zebra Striping
+                let rowBg = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+
+                html += `<tr class="${rowBg} hover:bg-blue-50 border-b transition-colors duration-150">`;
+
+                // Correlative / Status Indicator
+                let statusClass = 'bg-gray-200 text-gray-600'; // Default
+                if (row.status === 'VALIDADO') statusClass = 'bg-green-100 text-green-800 font-bold border-green-200';
+                else if (row.status === 'PENDIENTE') statusClass = 'bg-yellow-100 text-yellow-800 font-bold border-yellow-200';
+
+                // Note: Sticky cells must match row background to look right, unless they are specifically highlighted (like status)
+                // Status cell has its own background, so we don't strictly need rowBg there, but good to know.
+                html += `<td class="p-2 border sticky left-0 z-30 text-center text-xs ${statusClass}" style="width: 40px; min-width: 40px;">${index + 1}</td>`;
+
+                // JRV Link
+                // Use rowBg here to ensure sticky column blends with the row 
+                const linkPrefix = IS_READONLY ? '/public' : '';
+                html += `<td class="p-2 border font-bold sticky z-30 text-center ${rowBg}" style="left: 40px; width: 64px; min-width: 64px;"><a href="${linkPrefix}/comparison/${row.jrv}?level=${currentDetailLevel}" class="text-blue-600 hover:underline">${row.jrv}</a></td>`;
+
+                // NEW: Participation Cell
+                let pVal = row.participation !== undefined ? row.participation + '%' : '-';
+                let pClass = 'text-gray-700';
+                if (row.participation >= 100) pClass = 'text-red-600';
+
+                // Sticky at 104px (40+64)
+                html += `<td class="p-2 border sticky z-30 text-center text-xs font-bold ${pClass} ${rowBg}" style="left: 104px; width: 80px; min-width: 80px;">${pVal}</td>`;
+
+                // Map results by party name...
+                let resultsMap = {};
+                row.results.forEach(r => resultsMap[r.party] = r);
 
                 columns.forEach(col => {
-                    html += `<th class="p-2 border text-center" colspan="3">${col}</th>`;
+                    let r = resultsMap[col.name] || { trep: 0, esc: 0, diff: 0 };
+
+                    // Highlight logic
+                    let diffClass = r.diff === 0 ? 'text-green-500' : 'text-red-500 font-bold';
+                    let diffIcon = r.diff === 0 ? '<i class="ph ph-check"></i>' : r.diff;
+
+                    // Reordered: FRENAEL (trep), CNE (esc), DIF
+                    // FRENAEL (Blue Text only, no bg)
+                    html += `<td class="p-2 border text-center font-bold text-blue-700">${r.trep}</td>`;
+                    // CNE (Gray)
+                    html += `<td class="p-2 border text-center text-gray-600">${r.esc}</td>`;
+                    // DIF
+                    html += `<td class="p-2 border text-center ${diffClass} text-xs">${diffIcon}</td>`;
                 });
                 html += '</tr>';
+            });
+            html += '</tbody></table>';
 
-                // Sub-header
-                html += '<tr>';
-                html += '<th class="p-1 border sticky left-0 bg-gray-100 z-20"></th>';
-                columns.forEach(col => {
-                    html += '<th class="p-1 border text-center text-[10px] w-12 bg-gray-50">CNE</th>';
-                    html += '<th class="p-1 border text-center text-[10px] w-12 bg-blue-50 text-blue-700">FRE</th>';
-                    html += '<th class="p-1 border text-center text-[10px] w-10">DIF</th>';
+            container.innerHTML = html;
+        }
+
+
+
+
+
+        async function deleteJRV(jrv) {
+            if (!confirm(`¿ELIMINAR DEFINITIVAMENTE la JRV ${jrv}?`)) return;
+            try {
+                const res = await fetch('/api/delete_jrv', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id_jrv: jrv })
                 });
-                html += '</tr>';
-                html += '</thead>';
-
-                // Body
-                html += '<tbody>';
-                rows.forEach(row => {
-                    html += '<tr class="hover:bg-gray-50 border-b">';
-                    html += `<td class="p-2 border font-bold sticky left-0 bg-white z-10 text-center"><a href="/comparison/${row.jrv}?level=${currentDetailLevel}" class="text-blue-600 hover:underline">${row.jrv}</a></td>`;
-
-                    row.results.forEach(res => {
-                        // CNE
-                        html += `<td class="p-1 border text-center font-mono">${res.esc.toLocaleString()}</td>`;
-                        // FRENAEL
-                        html += `<td class="p-1 border text-center font-mono text-blue-700 bg-blue-50/30">${res.trep.toLocaleString()}</td>`;
-                        // DIFF
-                        const diffClass = res.diff === 0 ? 'text-green-600 font-bold' : 'bg-red-100 text-red-800 font-bold';
-                        html += `<td class="p-1 border text-center font-mono"><span class="px-1 rounded ${diffClass}">${res.diff}</span></td>`;
-                    });
-
-                    html += '</tr>';
-                });
-                html += '</tbody></table>';
-
-                container.innerHTML = html;
-            }
-
-
-
-
-
-            async function deleteJRV(jrv) {
-                if (!confirm(`¿ELIMINAR DEFINITIVAMENTE la JRV ${jrv}?`)) return;
-                try {
-                    const res = await fetch('/api/delete_jrv', {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ id_jrv: jrv })
-                    });
-                    if ((await res.json()).success) location.reload();
-                } catch (e) { alert("Error"); }
-            }
-        </script>
+                if ((await res.json()).success) location.reload();
+            } catch (e) { alert("Error"); }
+        }
+    </script>
 </body>
 
 </html>

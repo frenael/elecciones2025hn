@@ -43,7 +43,7 @@ def scan_folders():
             elif f.endswith('-ALCALDE-FRENAEL.json'):
                 inventory[j]['json_alc_frenael'] = f
             elif f.endswith('-DIPUTADOS-FRENAEL.json'):
-                inventory[j]['json_dip_frenael_legacy'] = f
+                inventory[j]['json_dip_frenael'] = f
 
     # 2. Scan Special Diputados Folder (p_processed_XXXX.json)
     if os.path.exists(FOLDER_DIP_FRENAEL):

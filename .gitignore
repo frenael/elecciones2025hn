@@ -1,9 +1,39 @@
-__pycache__/
-*.pyc
-.venv/
-.env
-deploy_package.zip
-*.db
+# Helper scripts and temp files
+*.tmp
+debug_*.py
+check_*.py
+verify_*.py
+test_*.py
+fix_*.py
+find_*.py
+inspect_*.py
+restore_*.py
+recalc_*.py
+force_recalc_totals.py
+cleanup_*.py
+analyze_status_gap.py
+list_candidates.py
 *.log
-data/ACTAS/
-data/JSON/
+frenael_debug.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# Flask
+instance/
+.webassets-cache
+
+# Data (Optional - Comment out if you want to push data)
+# data/
+# auditoria.db

@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="es">
+{% set readonly = readonly | default(False) %}
 
 <head>
     <meta charset="UTF-8">
@@ -91,11 +92,11 @@
     <!-- Navbar -->
     <div class="bg-white border-b px-6 py-2 flex justify-between items-center shadow-sm z-20 shrink-0">
         <div class="flex items-center gap-4">
-            <a href="/" class="text-gray-500 hover:text-black" title="Volver al Dashboard"><i
-                    class="ph ph-house text-xl"></i></a>
+            <a href="{{ '/public/' if readonly else '/' }}" class="text-gray-500 hover:text-black"
+                title="Volver al Dashboard"><i class="ph ph-house text-xl"></i></a>
 
             {% if prev_jrv %}
-            <a href="/comparison/{{ prev_jrv }}?level={{ level }}"
+            <a href="/{{ 'public/' if readonly else '' }}comparison/{{ prev_jrv }}?level={{ level }}"
                 class="bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1.5 rounded-lg font-bold text-sm shadow-sm transition-colors flex items-center gap-1">
                 <i class="ph ph-caret-left"></i> Anterior
             </a>
@@ -118,7 +119,13 @@
             </div>
         </div>
 
+        <div class="flex-1 text-center">
+            <h1 class="text-lg font-bold text-slate-700 uppercase">FRENAL: Observación Elecciones Generales Honduras
+                2025</h1>
+        </div>
+
         <div class="flex gap-2">
+            {% if not readonly %}
             <button id="btn-save" onclick="saveChangesUI()"
                 class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded-lg font-bold text-sm flex items-center gap-2 shadow-sm transition-colors">
                 <i class="ph ph-floppy-disk"></i> GUARDAR
@@ -127,11 +134,13 @@
                 class="bg-green-600 hover:bg-green-700 text-white px-6 py-1.5 rounded-lg font-bold text-sm flex items-center gap-2 shadow-sm transition-colors">
                 VALIDAR Y SIGUIENTE <i class="ph ph-caret-right text-lg"></i>
             </button>
+            {% endif %}
 
             {% if next_jrv %}
-            <a href="/comparison/{{ next_jrv }}?level={{ level }}"
-                class="text-gray-400 hover:text-gray-600 px-2 flex items-center" title="Siguiente sin validar">
-                <i class="ph ph-caret-right text-xl"></i>
+            <a href="/{{ 'public/' if readonly else '' }}comparison/{{ next_jrv }}?level={{ level }}"
+                class="{{ 'bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1.5 rounded-lg font-bold text-sm shadow-sm transition-colors flex items-center gap-1' if readonly else 'text-gray-400 hover:text-gray-600 px-2 flex items-center' }}"
+                title="Siguiente">
+                {% if readonly %}Siguiente{% endif %} <i class="ph ph-caret-right text-xl"></i>
             </a>
             {% endif %}
         </div>
@@ -179,7 +188,7 @@
         <!-- Level Selector -->
         <div class="bg-slate-900 p-4 flex justify-center space-x-4 shrink-0">
             {% for l in ['PRESIDENTE', 'DIPUTADOS', 'ALCALDE'] %}
-            <a href="{{ url_for('comparison', jrv=jrv, level=l) }}"
+            <a href="{{ url_for('public_comparison' if readonly else 'comparison', jrv=jrv, level=l) }}"
                 class="px-4 py-2 rounded-lg font-bold {{ 'bg-blue-600 text-white' if level == l else 'bg-slate-700 text-slate-300 hover:bg-slate-600' }}">
                 {{ l }}
             </a>
@@ -209,11 +218,13 @@
                         <i class="ph ph-image-slash text-4xl mb-2"></i>
                         <p class="text-lg font-bold">{% if comp_data.has_trep == False %}SIN ACTA{% else %}No Image{%
                             endif %}</p>
+                        {% if not readonly %}
                         <button onclick="triggerUpload('TREP')"
                             class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-full flex items-center gap-2 transition-transform hover:scale-105 shadow-lg z-30 pointer-events-auto">
                             <i class="ph ph-upload-simple font-bold"></i>
                             Subir Acta
                         </button>
+                        {% endif %}
                     </div>
                     {% endif %}
 
@@ -240,6 +251,11 @@
                     <button onclick="rotate('img-trep', 90)" title="Rotar Derecha" class="hover:text-blue-400"><i
                             class="ph ph-arrow-clockwise"></i></button>
 
+                    {% if not readonly %}
+                    <div class="w-px bg-gray-500 mx-1"></div>
+                    <button onclick="saveRotation('TREP')" title="Guardar Rotación"
+                        class="text-blue-400 hover:text-blue-300"><i class="ph ph-floppy-disk"></i></button>
+
                     <div class="w-px bg-gray-500 mx-2"></div>
 
                     <button onclick="triggerUpload('TREP')" title="Reemplazar Imagen" class="hover:text-yellow-400"><i
@@ -247,6 +263,7 @@
                     {% if comp_data.has_trep %}
                     <button onclick="deleteActa('TREP')" title="Eliminar Acta" class="hover:text-red-500"><i
                             class="ph ph-trash"></i></button>
+                    {% endif %}
                     {% endif %}
                 </div>
             </div>
@@ -256,11 +273,35 @@
 
                 <!-- Table Header -->
                 <div
-                    class="bg-indigo-900 text-white p-2 text-center text-sm font-bold shadow-md z-10 flex flex-col justify-center">
-                    <span>COMPARATIVA DE VOTOS</span>
-                    {% if comp_data.has_trep == False %}
-                    <span class="text-xs text-red-300 bg-red-900/50 px-2 rounded mt-1 animate-pulse">⚠ SIN ACTA EN
-                        FRENAEL - DATOS EN CERO</span>
+                    class="bg-indigo-900 text-white p-2 text-sm font-bold shadow-md z-10 flex justify-between items-center">
+                    <div class="flex flex-col">
+                        <span>COMPARATIVA DE VOTOS</span>
+                        {% if comp_data.has_trep == False %}
+                        <span class="text-[10px] text-red-300 bg-red-900/50 px-1 rounded mt-0.5 animate-pulse">⚠ SIN
+                            ACTA EN FRENAEL</span>
+                        {% endif %}
+                    </div>
+
+                    <!-- Bulk Actions -->
+                    {% if not readonly %}
+                    <div class="flex items-center space-x-2">
+                        <span
+                            class="text-[10px] text-indigo-300 uppercase tracking-wider font-bold hidden md:inline">Copiar:</span>
+                        <div class="flex items-center bg-indigo-800 rounded border border-indigo-600 shadow-sm">
+                            <button onclick="copyAll('OFICIAL', 'TREP')"
+                                class="px-3 py-1 hover:bg-indigo-600 rounded-l flex items-center gap-1 text-xs text-blue-200 transition-colors border-r border-indigo-700"
+                                title="Copiar OFICIAL a FRENAEL">
+                                <span class="font-bold">O</span> <i class="ph ph-arrow-right"></i> <span
+                                    class="font-bold">F</span>
+                            </button>
+                            <button onclick="copyAll('TREP', 'OFICIAL')"
+                                class="px-3 py-1 hover:bg-indigo-600 rounded-r flex items-center gap-1 text-xs text-emerald-200 transition-colors"
+                                title="Copiar FRENAEL a OFICIAL">
+                                <span class="font-bold">F</span> <i class="ph ph-arrow-right"></i> <span
+                                    class="font-bold">O</span>
+                            </button>
+                        </div>
+                    </div>
                     {% endif %}
                 </div>
 
@@ -292,14 +333,14 @@
                                 <td class="px-3 py-2 text-right bg-blue-900/10 group-hover:bg-blue-900/20">
                                     <span class="trep-value hidden">{{ v_trep }}</span>
                                     <input type="number" value="{{ v_trep }}" data-type="vote" data-key="{{ cand }}"
-                                        data-source="TREP"
+                                        data-source="TREP" {% if readonly %}disabled{% endif %}
                                         class="editable w-20 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-right focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none text-white font-mono"
                                         onkeydown="moveFocus(event, this)" oninput="markDirty()">
                                 </td>
                                 <td class="px-3 py-2 text-right bg-emerald-900/10 group-hover:bg-emerald-900/20">
                                     <span class="esc-value hidden" data-val="{{ v_esc }}"></span>
                                     <input type="number" value="{{ v_esc }}" data-type="vote" data-key="{{ cand }}"
-                                        data-source="OFICIAL"
+                                        data-source="OFICIAL" {% if readonly %}disabled{% endif %}
                                         class="editable w-20 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-right focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none text-white font-mono"
                                         onkeydown="moveFocus(event, this)" oninput="markDirty()">
                                 </td>
@@ -320,20 +361,22 @@
                                     {% if key == 'gran_total' %}
                                     <span id="summary-trep-total" class="font-mono text-blue-300">{{ t_val }}</span>
                                     {% else %}
-                                    <input type="number" value="{{ t_val }}" data-type="special" data-key="{{ key }}"
-                                        data-source="TREP"
+                                    <input type="number" value="{{ t_val }}" data-type="resumen" data-key="{{ key }}"
+                                        data-source="TREP" {% if readonly %}disabled{% endif %}
                                         class="editable w-20 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-right text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none text-white font-mono"
-                                        onkeydown="moveFocus(event, this)" oninput="markDirty()">
+                                        onkeydown="moveFocus(event, this)" oninput="markDirty()"
+                                        onchange="updateValue('{{ key }}', 'TREP', this.value, true)">
                                     {% endif %}
                                 </td>
                                 <td class="px-3 py-2 text-right text-slate-300">
                                     {% if key == 'gran_total' %}
                                     <span id="summary-esc-total" class="font-mono text-emerald-300">{{ e_val }}</span>
                                     {% else %}
-                                    <input type="number" value="{{ e_val }}" data-type="special" data-key="{{ key }}"
-                                        data-source="OFICIAL"
+                                    <input type="number" value="{{ e_val }}" data-type="resumen" data-key="{{ key }}"
+                                        data-source="OFICIAL" {% if readonly %}disabled{% endif %}
                                         class="editable w-20 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-right text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none text-white font-mono"
-                                        onkeydown="moveFocus(event, this)" oninput="markDirty()">
+                                        onkeydown="moveFocus(event, this)" oninput="markDirty()"
+                                        onchange="updateValue('{{ key }}', 'OFICIAL', this.value, true)">
                                     {% endif %}
                                 </td>
                                 <td class="px-3 py-2 text-center text-xs diff-cell">{{ e_val - t_val }}</td>
@@ -402,7 +445,7 @@
                                                 <div
                                                     class="flex-1 flex flex-col justify-center border border-blue-300 bg-blue-50 rounded text-center relative p-0.5">
                                                     <!-- <span class="text-[6px] text-blue-600 font-bold leading-none mb-0.5">F</span> -->
-                                                    <input type="number"
+                                                    <input type="number" {% if readonly %}disabled{% endif %}
                                                         class="editable w-full bg-transparent text-center font-mono text-xs font-bold outline-none p-0 focus:ring-0 border-none appearance-none text-blue-800 leading-tight"
                                                         value="{{ val_trep }}" data-type="vote" data-key="{{ key }}"
                                                         data-source="TREP" onfocus="this.select()"
@@ -415,11 +458,11 @@
                                                     class="flex-1 flex flex-col justify-center border rounded text-center relative p-0.5
                                                         {% if val_trep != val_esc %}border-red-300 bg-red-50{% else %}border-emerald-200 bg-emerald-50{% endif %}">
                                                     <!-- <span class="text-[6px] font-bold leading-none mb-0.5 {% if val_trep != val_esc %}text-red-500{% else %}text-emerald-500{% endif %}">O</span> -->
-                                                    <input type="number"
+                                                    <input type="number" {% if readonly %}disabled{% endif %}
                                                         class="editable w-full bg-transparent text-center font-mono text-xs font-bold outline-none p-0 focus:ring-0 border-none appearance-none leading-tight
-                                                            {% if val_trep != val_esc %}text-red-700{% else %}text-emerald-700{% endif %}"
-                                                        value="{{ val_esc }}" data-type="vote" data-key="{{ key }}"
-                                                        data-source="OFICIAL" onfocus="this.select()"
+                                                            {% if val_trep != val_esc %}text-red-700{% else %}text-emerald-700{% endif %}" value="{{ val_esc }}"
+                                                        data-type="vote" data-key="{{ key }}" data-source="OFICIAL"
+                                                        onfocus="this.select()"
                                                         onchange="updateValue('{{ key }}', 'ESCRUTINIO', this.value)"
                                                         title="Oficial">
                                                 </div>
@@ -477,17 +520,54 @@
                                 {% if level == 'DIPUTADOS' %}
                                 {% set col_span = comp_data.matrix.parties|length + 1 %}
 
-                                <!-- Total Validos -->
+                                <!-- Total Marcas -->
                                 <tr class="bg-gray-50 border-t border-gray-300">
                                     <td colspan="{{ col_span }}" class="p-2">
                                         <div class="flex items-center justify-end gap-3 pr-2">
-                                            <span class="font-bold text-gray-600 text-xs uppercase">Total Votos
-                                                Validos:</span>
-                                            <div class="w-20 text-center font-mono font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded px-2 py-1 text-xs"
-                                                id="summary-valid-trep">0</div>
-                                            <div class="w-20 text-center font-mono font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-2 py-1 text-xs"
-                                                id="summary-valid-esc">0</div>
-                                            <div class="w-12"></div> <!-- Spacer for Diff -->
+                                            <span class="font-bold text-gray-600 text-xs uppercase">TOTAL MARCAS:</span>
+                                            <div id="matrix-total-trep"
+                                                class="w-20 text-center font-mono font-bold text-blue-900 bg-blue-50 border border-blue-200 rounded px-2 py-1 text-xs">
+                                                {{ comp_data.trep.total_marcas }}
+                                            </div>
+                                            <div id="matrix-total-esc"
+                                                class="w-20 text-center font-mono font-bold text-emerald-900 bg-emerald-50 border border-emerald-200 rounded px-2 py-1 text-xs">
+                                                {{ comp_data.esc.total_marcas }}
+                                            </div>
+                                            <div id="matrix-diff-total"
+                                                class="w-12 text-center text-xs font-bold diff-cell">
+                                                {{ comp_data.esc.total_marcas - comp_data.trep.total_marcas }}
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+
+                                <!-- Papeletas Validas -->
+                                <tr class="bg-white border-t border-gray-200 summary-row" data-key="votos_validos">
+                                    <td colspan="{{ col_span }}" class="p-2">
+                                        <div class="flex items-center justify-end gap-3 pr-2">
+                                            <span class="font-bold text-gray-600 text-xs uppercase">PAPELETAS
+                                                VALIDAS:</span>
+
+                                            <!-- TREP -->
+                                            <input type="number" {% if readonly %}disabled{% endif %}
+                                                class="editable w-20 bg-white border border-blue-300 rounded px-2 py-1 text-center text-xs font-mono font-bold text-blue-800 focus:ring-1 focus:ring-blue-500 outline-none"
+                                                value="{{ comp_data.trep.resumen.votos_validos }}" data-type="resumen"
+                                                data-key="votos_validos" data-source="TREP" onfocus="this.select()"
+                                                onchange="updateValue('votos_validos', 'TREP', this.value, true)">
+
+                                            <!-- OFICIAL -->
+                                            <input type="number" {% if readonly %}disabled{% endif %}
+                                                class="editable w-20 bg-white border border-emerald-300 rounded px-2 py-1 text-center text-xs font-mono font-bold text-emerald-800 focus:ring-1 focus:ring-emerald-500 outline-none"
+                                                value="{{ comp_data.esc.resumen.votos_validos }}" data-type="resumen"
+                                                data-key="votos_validos" data-source="OFICIAL" onfocus="this.select()"
+                                                onchange="updateValue('votos_validos', 'OFICIAL', this.value, true)"
+                                                title="Oficial">
+
+                                            <!-- Diff -->
+                                            <div class="w-12 text-center font-bold text-xs diff-cell">
+                                                {{ comp_data.esc.resumen.votos_validos -
+                                                comp_data.trep.resumen.votos_validos }}
+                                            </div>
                                         </div>
                                     </td>
                                 </tr>
@@ -496,18 +576,18 @@
                                 <tr class="bg-white border-t border-gray-200 summary-row" data-key="votos_blancos">
                                     <td colspan="{{ col_span }}" class="p-2">
                                         <div class="flex items-center justify-end gap-3 pr-2">
-                                            <span class="font-bold text-gray-600 text-xs uppercase">Votos
-                                                Blancos:</span>
+                                            <span class="font-bold text-gray-600 text-xs uppercase">PAPELETAS
+                                                BLANCAS:</span>
 
                                             <!-- TREP -->
-                                            <input type="number"
+                                            <input type="number" {% if readonly %}disabled{% endif %}
                                                 class="editable w-20 bg-white border border-blue-300 rounded px-2 py-1 text-center text-xs font-mono font-bold text-blue-800 focus:ring-1 focus:ring-blue-500 outline-none"
                                                 value="{{ comp_data.trep.resumen.votos_blancos }}" data-type="resumen"
                                                 data-key="votos_blancos" data-source="TREP" onfocus="this.select()"
                                                 onchange="updateValue('votos_blancos', 'TREP', this.value, true)">
 
                                             <!-- OFICIAL -->
-                                            <input type="number"
+                                            <input type="number" {% if readonly %}disabled{% endif %}
                                                 class="editable w-20 bg-white border border-emerald-300 rounded px-2 py-1 text-center text-xs font-mono font-bold text-emerald-800 focus:ring-1 focus:ring-emerald-500 outline-none"
                                                 value="{{ comp_data.esc.resumen.votos_blancos }}" data-type="resumen"
                                                 data-key="votos_blancos" data-source="OFICIAL" onfocus="this.select()"
@@ -527,17 +607,18 @@
                                 <tr class="bg-white border-t border-gray-200 summary-row" data-key="votos_nulos">
                                     <td colspan="{{ col_span }}" class="p-2">
                                         <div class="flex items-center justify-end gap-3 pr-2">
-                                            <span class="font-bold text-gray-600 text-xs uppercase">Votos Nulos:</span>
+                                            <span class="font-bold text-gray-600 text-xs uppercase">PAPELETAS
+                                                NULAS:</span>
 
                                             <!-- TREP -->
-                                            <input type="number"
+                                            <input type="number" {% if readonly %}disabled{% endif %}
                                                 class="editable w-20 bg-white border border-blue-300 rounded px-2 py-1 text-center text-xs font-mono font-bold text-blue-800 focus:ring-1 focus:ring-blue-500 outline-none"
                                                 value="{{ comp_data.trep.resumen.votos_nulos }}" data-type="resumen"
                                                 data-key="votos_nulos" data-source="TREP" onfocus="this.select()"
                                                 onchange="updateValue('votos_nulos', 'TREP', this.value, true)">
 
                                             <!-- OFICIAL -->
-                                            <input type="number"
+                                            <input type="number" {% if readonly %}disabled{% endif %}
                                                 class="editable w-20 bg-white border border-emerald-300 rounded px-2 py-1 text-center text-xs font-mono font-bold text-emerald-800 focus:ring-1 focus:ring-emerald-500 outline-none"
                                                 value="{{ comp_data.esc.resumen.votos_nulos }}" data-type="resumen"
                                                 data-key="votos_nulos" data-source="OFICIAL" onfocus="this.select()"
@@ -558,7 +639,7 @@
                                     data-key="gran_total">
                                     <td colspan="{{ col_span }}" class="p-2">
                                         <div class="flex items-center justify-end gap-3 pr-2 text-sm">
-                                            <span class="text-gray-800 uppercase">GRAN TOTAL:</span>
+                                            <span class="text-gray-800 uppercase">TOTAL:</span>
                                             <div class="w-20 text-center text-blue-900" id="summary-total-trep">0</div>
                                             <div class="w-20 text-center text-emerald-900" id="summary-total-esc">0
                                             </div>
@@ -609,11 +690,13 @@
                         <i class="ph ph-image-slash text-4xl mb-2"></i>
                         <p class="text-lg font-bold">{% if comp_data.has_trep == False %}SIN ACTA{% else %}No Image{%
                             endif %}</p>
+                        {% if not readonly %}
                         <button onclick="triggerUpload('OFICIAL')"
                             class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-full flex items-center gap-2 transition-transform hover:scale-105 shadow-lg z-30 pointer-events-auto">
                             <i class="ph ph-upload-simple font-bold"></i>
                             Subir Acta
                         </button>
+                        {% endif %}
                     </div>
                     {% endif %}
 
@@ -640,6 +723,11 @@
                     <button onclick="rotate('img-esc', 90)" title="Rotar Derecha" class="hover:text-emerald-400"><i
                             class="ph ph-arrow-clockwise"></i></button>
 
+                    {% if not readonly %}
+                    <div class="w-px bg-gray-500 mx-1"></div>
+                    <button onclick="saveRotation('OFICIAL')" title="Guardar Rotación"
+                        class="text-blue-400 hover:text-blue-300"><i class="ph ph-floppy-disk"></i></button>
+
                     <div class="w-px bg-gray-500 mx-2"></div>
 
                     <button onclick="triggerUpload('OFICIAL')" title="Reemplazar Imagen"
@@ -648,6 +736,7 @@
                     <button onclick="deleteActa('OFICIAL')" title="Eliminar Acta" class="hover:text-red-500"><i
                             class="ph ph-trash"></i></button>
                     {% endif %}
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -655,27 +744,117 @@
     </div>
 
     <script>
-        const ID_TREP = {{ comp_data.trep.meta.id if comp_data.trep and comp_data.trep.meta else 0 }};
-        const ID_ESC = {{ comp_data.esc.meta.id if comp_data.esc and comp_data.esc.meta else 0 }};
+        const ID_TREP = {{ comp_data.trep.meta.id if comp_data.trep and comp_data.trep.meta and comp_data.trep.meta.id else 0 }};
+        const ID_ESC = {{ comp_data.esc.meta.id if comp_data.esc and comp_data.esc.meta and comp_data.esc.meta.id else 0 }};
+        console.log("Debug IDs - TREP:", ID_TREP, "ESC:", ID_ESC);
+
         let hasUnsavedChanges = false;
+
+        // Init Rotation
+        let initialRotationEsc = 0;
+        let initialRotationTrep = 0;
+        try {
+            {% if comp_data.esc and comp_data.esc.meta and comp_data.esc.meta.debug_data %}
+            const debugStrEsc = {{ comp_data.esc.meta.debug_data | tojson
+        }};
+        const debugObjEsc = JSON.parse(debugStrEsc);
+        if (debugObjEsc.rotation) initialRotationEsc = parseInt(debugObjEsc.rotation) || 0;
+        {% endif %}
+
+        {% if comp_data.trep and comp_data.trep.meta and comp_data.trep.meta.debug_data %}
+        const debugStrTrep = {{ comp_data.trep.meta.debug_data | tojson }};
+        const debugObjTrep = JSON.parse(debugStrTrep);
+        if (debugObjTrep.rotation) initialRotationTrep = parseInt(debugObjTrep.rotation) || 0;
+        {% endif %}
+        } catch (e) {
+            console.error("Error parsing debug_data:", e);
+        }
+
+        // Apply initial rotation on load
+        window.addEventListener('DOMContentLoaded', () => {
+            if (initialRotationEsc !== 0) {
+                const img = document.getElementById('img-esc');
+                if (img) {
+                    const s = getTransformState(img);
+                    s.rotate = initialRotationEsc;
+                    updateTransform(img, s);
+                }
+            }
+            if (initialRotationTrep !== 0) {
+                const img = document.getElementById('img-trep');
+                if (img) {
+                    const s = getTransformState(img);
+                    s.rotate = initialRotationTrep;
+                    updateTransform(img, s);
+                }
+            }
+        });
+
+        function updateMatrixTotals() {
+            const table = document.querySelector('table.border-collapse');
+            if (!table) return;
+            const headerRow = table.querySelector('thead tr');
+            if (!headerRow) return;
+            const cols = headerRow.querySelectorAll('th');
+            if (cols.length < 2) return;
+
+            // Iterate Party Columns (index 1 to N)
+            for (let i = 1; i < cols.length; i++) {
+                let sumTrep = 0;
+                let sumEsc = 0;
+
+                // Sum inputs in this column
+                const cells = table.querySelectorAll(`tbody tr td:nth-child(${i + 1})`);
+                cells.forEach(cell => {
+                    const inpTrep = cell.querySelector('input[data-source="TREP"]');
+                    const inpEsc = cell.querySelector('input[data-source="OFICIAL"]');
+                    if (inpTrep) sumTrep += (parseInt(inpTrep.value) || 0);
+                    if (inpEsc) sumEsc += (parseInt(inpEsc.value) || 0);
+                });
+
+                // Update Footer Totals
+                // Row 1: Totals
+                const footerRow = table.querySelector('tfoot tr:first-child');
+                if (footerRow) {
+                    const cell = footerRow.querySelector(`td:nth-child(${i + 1})`);
+                    if (cell) {
+                        const sT = cell.querySelector('.text-blue-900');
+                        const sE = cell.querySelector('.text-gray-900');
+                        if (sT) sT.innerText = sumTrep;
+                        if (sE) sE.innerText = sumEsc;
+                    }
+                }
+
+                // Row 2: Diff
+                const diffRow = table.querySelector('tfoot tr:nth-child(2)');
+                if (diffRow) {
+                    const cell = diffRow.querySelector(`td:nth-child(${i + 1})`);
+                    if (cell) {
+                        const div = cell.querySelector('div');
+                        if (div) {
+                            const d = sumEsc - sumTrep;
+                            div.innerText = d;
+                            div.className = `w-full flex items-center justify-center font-mono text-xs font-bold ${d === 0 ? 'text-emerald-600' : 'text-red-600'}`;
+                        }
+                    }
+                }
+            }
+        }
 
         function updateCalculations() {
             let totalTrep = 0;
             let totalEsc = 0;
 
-            // 1. Sum Candidates (Works for List and Matrix views if structure matches)
+            // 1. Sum Candidates
             document.querySelectorAll('tbody tr').forEach(row => {
-                // Skip summary rows to avoid double counting if they are in tbody
                 if (row.classList.contains('summary-row')) return;
-
-                // Sum inputs in this row
                 const inputs = row.querySelectorAll('input[data-type="vote"]');
                 inputs.forEach(inp => {
                     if (inp.dataset.source === 'TREP') totalTrep += (parseInt(inp.value) || 0);
                     if (inp.dataset.source === 'OFICIAL' || inp.dataset.source === 'ESCRUTINIO') totalEsc += (parseInt(inp.value) || 0);
                 });
 
-                // Update Row Diff (List View Specific)
+                // Row Diff (List View)
                 const diffCell = row.querySelector('.diff-cell');
                 if (diffCell) {
                     let rT = 0, rE = 0;
@@ -689,40 +868,129 @@
                 }
             });
 
-            // 2. Update Header Totals (Candidates Only)
+            // Update Matrix Columns
+            updateMatrixTotals();
+
+            // Update Matrix Grand Total (Total Marcas)
+            const mTT = document.getElementById('matrix-total-trep');
+            const mTE = document.getElementById('matrix-total-esc');
+            const mTD = document.getElementById('matrix-diff-total');
+            if (mTT) mTT.innerText = totalTrep;
+            if (mTE) mTE.innerText = totalEsc;
+            if (mTD) {
+                const d = totalEsc - totalTrep;
+                mTD.innerText = d;
+                // mTD.className = ... (optional, it triggers css)
+            }
+
+            // 2. Update Header Totals (Candidates Only, List View)
             const fT = document.getElementById('total-trep');
             const fE = document.getElementById('total-esc');
             if (fT) fT.innerText = totalTrep.toLocaleString();
             if (fE) fE.innerText = totalEsc.toLocaleString();
 
-            // 3. Global Summary (Deputies)
-            const sumValidTrep = document.getElementById('summary-valid-trep');
-            const sumValidEsc = document.getElementById('summary-valid-esc');
+            // 3. Update Gran Total
+            // IF DIPUTADOS: Gran Total = Papeletas Validas (Editable) + Blancos + Nulos
+            // IF OTHERS: Gran Total = Total Marcas (Sum of Candidates) + Blancos + Nulos
 
-            if (sumValidTrep && sumValidEsc) {
-                // Update Valid Votes
-                sumValidTrep.innerText = totalTrep.toLocaleString();
-                sumValidEsc.innerText = totalEsc.toLocaleString();
+            const isDiputados = document.querySelector('input[data-key="votos_validos"]'); // Detection check
 
-                // Get Blancos / Nulos
-                const getVal = (key, source) => {
-                    // Try to find input specifically for summary
-                    const el = document.querySelector(`input[data-type="resumen"][data-key="${key}"][data-source="${source}"]`);
-                    return el ? (parseInt(el.value) || 0) : 0;
-                };
+            const getVal = (key, source) => {
+                const el = document.querySelector(`input[data-type="resumen"][data-key="${key}"][data-source="${source}"]`);
+                return el ? (parseInt(el.value) || 0) : 0;
+            };
+
+            let granTotalTrep = 0;
+            let granTotalEsc = 0;
+
+            if (isDiputados) {
+                const validosTrep = getVal('votos_validos', 'TREP');
+                const validosEsc = getVal('votos_validos', 'OFICIAL');
 
                 const blancosTrep = getVal('votos_blancos', 'TREP');
                 const nulosTrep = getVal('votos_nulos', 'TREP');
-                const blancosEsc = getVal('votos_blancos', 'ESCRUTINIO'); // Uses ESCRUTINIO in HTML
-                const nulosEsc = getVal('votos_nulos', 'ESCRUTINIO');
+                const blancosEsc = getVal('votos_blancos', 'OFICIAL');
+                const nulosEsc = getVal('votos_nulos', 'OFICIAL');
 
-                const granTotalTrep = totalTrep + blancosTrep + nulosTrep;
-                const granTotalEsc = totalEsc + blancosEsc + nulosEsc;
+                granTotalTrep = validosTrep + blancosTrep + nulosTrep;
+                granTotalEsc = validosEsc + blancosEsc + nulosEsc;
 
                 const elTotalTrep = document.getElementById('summary-total-trep');
                 const elTotalEsc = document.getElementById('summary-total-esc');
                 if (elTotalTrep) elTotalTrep.innerText = granTotalTrep.toLocaleString();
                 if (elTotalEsc) elTotalEsc.innerText = granTotalEsc.toLocaleString();
+
+                // Update Diff for Grand Total
+                const gtRow = document.querySelector('tr[data-key="gran_total"]');
+                if (gtRow) {
+                    const diffCell = gtRow.querySelector('.diff-cell');
+                    if (diffCell) diffCell.innerText = (granTotalEsc - granTotalTrep).toLocaleString();
+                }
+
+            } else {
+                // PRESIDENTE / ALCALDE Logic (Sum of Candidates is Validos)
+                const blancosTrep = getVal('votos_blancos', 'TREP');
+                const nulosTrep = getVal('votos_nulos', 'TREP');
+                const blancosEsc = getVal('votos_blancos', 'OFICIAL');
+                const nulosEsc = getVal('votos_nulos', 'OFICIAL');
+
+                granTotalTrep = totalTrep + blancosTrep + nulosTrep;
+                granTotalEsc = totalEsc + blancosEsc + nulosEsc;
+
+                const elTotalTrep = document.getElementById('summary-total-trep');
+                const elTotalEsc = document.getElementById('summary-total-esc');
+                if (elTotalTrep) elTotalTrep.innerText = granTotalTrep.toLocaleString();
+                if (elTotalEsc) elTotalEsc.innerText = granTotalEsc.toLocaleString();
+
+            }
+
+            // 4. Global Summary (Presidente/Alcalde) - Different IDs
+            const presTotalTrep = document.getElementById('summary-trep-total');
+            const presTotalEsc = document.getElementById('summary-esc-total');
+
+            if (presTotalTrep || presTotalEsc) {
+                const getPresVal = (key, source) => {
+                    const el = document.querySelector(`tr[data-key="${key}"] input[data-source="${source}"]`);
+                    return el ? (parseInt(el.value) || 0) : 0;
+                };
+
+                const pBlancosTrep = getPresVal('votos_blancos', 'TREP');
+                const pNulosTrep = getPresVal('votos_nulos', 'TREP');
+                const pBlancosEsc = getPresVal('votos_blancos', 'OFICIAL');
+                const pNulosEsc = getPresVal('votos_nulos', 'OFICIAL');
+
+                const gtTrep = totalTrep + pBlancosTrep + pNulosTrep;
+                const gtEsc = totalEsc + pBlancosEsc + pNulosEsc;
+
+                if (presTotalTrep) presTotalTrep.innerText = gtTrep.toLocaleString();
+                if (presTotalEsc) presTotalEsc.innerText = gtEsc.toLocaleString();
+
+                // Update Diff for Grand Total (Presidente)
+                // Update Diff for Grand Total (Presidente)
+                const grandTotalRow = document.querySelector('tr[data-key="gran_total"]');
+                if (grandTotalRow) {
+                    const diffCell = grandTotalRow.querySelector('.diff-cell');
+                    if (diffCell) {
+                        const d = gtEsc - gtTrep;
+                        diffCell.innerText = d > 0 ? '+' + d : d;
+                        diffCell.className = 'px-3 py-2 text-center text-xs diff-cell font-bold ' + (d === 0 ? 'text-gray-400' : 'text-red-500');
+                    }
+                }
+
+                // Also Update Blancos / Nulos Diffs in Realtime
+                ['votos_blancos', 'votos_nulos'].forEach(key => {
+                    const row = document.querySelector(`tr[data-key="${key}"]`);
+                    if (row) {
+                        const diffCell = row.querySelector('.diff-cell');
+                        const t = getPresVal(key, 'TREP');
+                        const e = getPresVal(key, 'OFICIAL');
+                        const d = e - t;
+                        if (diffCell) {
+                            diffCell.innerText = d > 0 ? '+' + d : d;
+                            diffCell.className = 'px-3 py-2 text-center text-xs diff-cell font-bold ' + (d === 0 ? 'text-gray-400' : 'text-red-500');
+                        }
+                    }
+                });
             }
         }
 
@@ -749,9 +1017,62 @@
             }
         }
 
-        // Missing function for Matrix View inputs
-        function updateValue(key, source, value) {
+        async function updateValue(key, source, value, isResumen = false) {
             markDirty();
+
+            // Normalize Source
+            const normSource = (source === 'ESCRUTINIO' || source === 'OFICIAL' || source === 'CNE') ? 'OFICIAL' : 'TREP';
+
+            // Auto Save Logic
+            let targetId = (normSource === 'OFICIAL') ? ID_ESC : ID_TREP;
+
+            // Handle creating Official if missing
+            if (!targetId && normSource === 'OFICIAL') targetId = 0;
+
+            if (!targetId && normSource !== 'OFICIAL') return;
+
+            let action = isResumen ? 'update_resumen' : 'update_vote';
+            let val = parseInt(value) || 0;
+
+            try {
+                // Show mini saving indicator?
+                const s = document.getElementById('save-status');
+                if (s) { s.innerText = "Guardando..."; s.classList.add('text-blue-500'); }
+
+                await fetch('/api/update_results', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action,
+                        id_acta: targetId,
+                        key: key,
+                        votos: val,
+                        jrv: '{{ jrv }}',
+                        level: '{{ level }}',
+                        source: source
+                    })
+                });
+
+                // If successful, maybe update ID_ESC if we just created it?
+                // But honestly, reload is better or just assume it exists now.
+                // We won't get the new ID back easily to update const ID_ESC without reload.
+                // But for subsequent edits, passing 0 is fine as get_or_create will find it.
+
+                if (s) {
+                    s.innerText = "Guardado";
+                    s.classList.remove('text-blue-500', 'text-yellow-500', 'animate-pulse');
+                    s.classList.add('text-green-500');
+                    setTimeout(() => {
+                        s.innerText = "Todo guardado";
+                        s.classList.remove('text-green-500');
+                        s.classList.add('text-slate-500', 'italic');
+                        hasUnsavedChanges = false;
+                    }, 1000);
+                }
+            } catch (e) {
+                console.error("Auto save failed", e);
+                const s = document.getElementById('save-status');
+                if (s) { s.innerText = "Error al guardar"; s.classList.add('text-red-500'); }
+            }
         }
 
         function hasChanges() { return hasUnsavedChanges; }
@@ -869,8 +1190,77 @@
 
 
 
+        async function saveRotation(source) {
+            const imgId = source === 'TREP' ? 'img-trep' : 'img-esc';
+            const actaId = source === 'TREP' ? ID_TREP : ID_ESC;
+
+            const img = document.getElementById(imgId);
+            if (!img || !actaId) {
+                alert("No se puede guardar: Imagen o ID no encontrados.");
+                return;
+            }
+
+            const btn = event.currentTarget;
+            const originalHtml = btn.innerHTML;
+            btn.innerHTML = '<i class="ph ph-spinner animate-spin"></i>';
+
+            const s = getTransformState(img);
+            try {
+                const response = await fetch('/api/update_results', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'update_rotation', id_acta: actaId, rotation: s.rotate })
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    // Success feedback
+                    btn.innerHTML = '<i class="ph ph-check text-green-500"></i>';
+                    setTimeout(() => btn.innerHTML = originalHtml, 2000);
+                } else {
+                    alert("Error al guardar rotación.");
+                    btn.innerHTML = originalHtml;
+                }
+            } catch (e) {
+                console.error("Error saving rotation:", e);
+                alert("Error de conexión.");
+                btn.innerHTML = originalHtml;
+            }
+        }
+
         async function commitSave(silent = false) {
             if (!ID_TREP && !ID_ESC) return;
+
+            // Save Rotation for Official Image
+            const imgEsc = document.getElementById('img-esc');
+            if (imgEsc && ID_ESC) {
+                const s = getTransformState(imgEsc);
+                try {
+                    await fetch('/api/update_results', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'update_rotation', id_acta: ID_ESC, rotation: s.rotate })
+                    });
+                } catch (e) {
+                    console.error("Error saving rotation (ESC):", e);
+                }
+            }
+
+            // Save Rotation for FRENAEL Image
+            const imgTrep = document.getElementById('img-trep');
+            console.log("Saving TREP Rotation. Element:", imgTrep, "ID:", ID_TREP);
+            if (imgTrep && ID_TREP) {
+                const s = getTransformState(imgTrep);
+                console.log("TREP Transform State:", s);
+                try {
+                    await fetch('/api/update_results', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'update_rotation', id_acta: ID_TREP, rotation: s.rotate })
+                    });
+                    console.log("TREP Rotation Sent");
+                } catch (e) {
+                    console.error("Error saving rotation (TREP):", e);
+                }
+            }
+
             const edits = [];
             document.querySelectorAll('.editable').forEach(el => {
                 let val = parseInt(el.value) || 0;
@@ -886,13 +1276,31 @@
 
             for (const item of edits) {
                 let action = (item.type === 'special' || item.type === 'resumen') ? 'update_resumen' : 'update_vote';
-                let targetId = (item.source === 'OFICIAL') ? ID_ESC : ID_TREP;
 
-                if (!targetId) continue;
+                // Normalize Source for Save
+                let normSource = (item.source === 'ESCRUTINIO' || item.source === 'OFICIAL' || item.source === 'CNE') ? 'OFICIAL' : 'TREP';
+
+                let targetId = (normSource === 'OFICIAL') ? ID_ESC : ID_TREP;
+
+                // Create Official Acta if missing (ID=0), but skip if TREP is missing (should verify TREP existence too?)
+                // Actually, just pass 0 if Official, let backend handle creation.
+                // Only skip if TREP ID is missing and source is TREP
+                if (!targetId && normSource !== 'OFICIAL') continue;
+
+                // If targetId is null/undefined/0 for Official, pass 0 so backend sees it.
+                if (!targetId && normSource === 'OFICIAL') targetId = 0;
 
                 await fetch('/api/update_results', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action, id_acta: targetId, key: item.key, votos: item.votos })
+                    body: JSON.stringify({
+                        action,
+                        id_acta: targetId,
+                        key: item.key,
+                        votos: item.votos,
+                        jrv: '{{ jrv }}',
+                        level: '{{ level }}',
+                        source: normSource
+                    })
                 });
             }
             hasUnsavedChanges = false;
@@ -1023,6 +1431,82 @@
                 }
             }
         });
+
+        // Bulk Copy Logic
+        function copyAll(fromSource, toSource) {
+            if (!confirm(`¿Estás seguro de copiar todos los valores de ${fromSource} a ${toSource}? Esto sobrescribirá los datos actuales en pantalla.`)) return;
+
+            // Normalize for selectors (TREP, OFICIAL)
+            // In Deputies Matrix, OFICIAL is labeled "OFICIAL" in data-source.
+            // But fromSource argument might be 'TREP' or 'OFICIAL'
+
+            const inputs = document.querySelectorAll('input.editable');
+            let count = 0;
+
+            inputs.forEach(input => {
+                // We are looking for the DESTINATION input
+                // Check if this input matches the 'toSource' (using strict check or normalized)
+                let inputSource = input.dataset.source;
+                // data-source is 'TREP' or 'OFICIAL' or 'ESCRUTINIO'
+
+                // Normalize Input Source
+                let normInputSource = (inputSource === 'ESCRUTINIO' || inputSource === 'OFICIAL' || inputSource === 'CNE') ? 'OFICIAL' : 'TREP';
+
+                if (normInputSource === toSource) {
+                    // This is a destination input. Find its twin.
+                    // Twin is in same container? 
+                    // Matrix: They are in same 'tr' -> 'td'? No, different TDs?
+                    // Let's see HTML structure.
+                    // Matrix: Each TD has BOTH inputs.
+                    // List: Each TR has BOTH inputs.
+
+                    const parent = input.parentElement.parentElement; // div -> div -> td/tr?
+                    // Structure: td > div (flex) > div (flex-1) > input
+                    // So twin is in parent.querySelector(...)
+
+                    // Actually, let's look for the sibling based on data-key
+                    const key = input.dataset.key;
+                    const type = input.dataset.type;
+
+                    // Find the Source Input with same key/type but fromSource
+                    // We need to be careful about matching exact key
+
+                    // Scope search to the same row to be safe? Or global?
+                    // Global is easier if keys are unique (which they ARE for votes).
+                    // Resume keys are unique too.
+
+                    // Note: querySelectorAll might be slow inside loop.
+                    // Better: construct map first? Or just search document.
+                    // Since it's a user triggered action, a little delay is ok.
+
+                    // Try to find source input
+                    // We need to match data-source that resolves to fromSource
+
+                    // Construct selector for source
+                    const sourceSelector = `input[data-key="${key}"][data-type="${type}"]`;
+                    const candidates = document.querySelectorAll(sourceSelector);
+
+                    let sourceInput = null;
+                    candidates.forEach(cand => {
+                        let s = cand.dataset.source;
+                        let n = (s === 'ESCRUTINIO' || s === 'OFICIAL' || s === 'CNE') ? 'OFICIAL' : 'TREP';
+                        if (n === fromSource) sourceInput = cand;
+                    });
+
+                    if (sourceInput) {
+                        input.value = sourceInput.value;
+                        count++;
+                    }
+                }
+            });
+
+            if (count > 0) {
+                markDirty();
+                alert(`Se copiaron ${count} registros. Recuerda GUARDAR para aplicar los cambios.`);
+            } else {
+                alert("No se encontraron registros coincidentes para copiar.");
+            }
+        }
 
         // Manual Upload & Delete Logic
         function triggerUpload(source) {

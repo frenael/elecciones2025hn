@@ -14,6 +14,37 @@ ORDEN_OFICIAL = [
     "PARTIDO NACIONAL DE HONDURAS"
 ]
 
+def map_party_name(text):
+    up = text.upper()
+    
+    # Major Parties First to avoid substring confusion (e.g. Salvador in Liberal candidate name)
+    
+    # NATIONAL
+    if "NACIONAL" in up: return "P. NACIONAL"
+    
+    # LIBERAL
+    if "LIBERAL" in up: return "P. LIBERAL"
+    
+    # LIBRE
+    if "LIBRE" in up or "REFUNDACION" in up: return "LIBRE"
+    
+    # DC
+    if "DC" in up or "DEMOCRATA CRISTIANO" in up: return "DC"
+    
+    # PINU
+    if "PINU" in up or "INNOVACION" in up: return "PINU"
+    
+    # ALIANZA
+    if "ALIANZA" in up: return "ALIANZA"
+
+    # PSH / SALVADOR (Check last, as his name appears in other alliances/candidates sometimes)
+    if "SALVADOR" in up or "PSH" in up: return "PSH"
+    
+    # Junk / Headers from CSV import errors
+    if "RESULTADOS" in up or "COLUMNS" in up or "VOTOS" in up: return None 
+    
+    return "OTROS" # Fallback for truly unknown, but we want to avoid if possible
+
 def get_db_connection():
     conn = sqlite3.connect(DB_NAME)
     conn.row_factory = sqlite3.Row
@@ -85,6 +116,34 @@ def update_acta_path(jrv, origen, new_path, nivel='PRESIDENTE'):
     conn.commit()
     conn.close()
     return changes > 0
+
+def update_acta_rotation(acta_id, rotation):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        # Get current debug_data
+        row = cursor.execute("SELECT debug_data FROM actas WHERE id = ?", (acta_id,)).fetchone()
+        if row:
+            # Use index 0 to be safe against Row/Tuple differences
+            current_data = row[0]
+            try:
+                data_json = json.loads(current_data) if current_data else {}
+            except:
+                data_json = {}
+            
+            # Update rotation
+            data_json['rotation'] = rotation
+            
+            # Write back
+            cursor.execute("UPDATE actas SET debug_data = ? WHERE id = ?", (json.dumps(data_json), acta_id))
+            conn.commit()
+            return True
+        return False
+    except Exception as e:
+        print(f"Error updating rotation: {e}")
+        return False
+    finally:
+        conn.close()
 
 def save_acta_result(jrv, origen, filepath, consensus_data, nivel='PRESIDENTE'):
     conn = get_db_connection()
@@ -271,8 +330,8 @@ def get_comparison_data(jrv, nivel='PRESIDENTE'):
 
     # --- Initialize Structure ---
     comp_data = {
-        'trep': {'votos': {}, 'meta': {}, 'resumen': {'votos_blancos': 0, 'votos_nulos': 0, 'gran_total': 0}},
-        'esc': {'votos': {}, 'meta': {}, 'resumen': {'votos_blancos': 0, 'votos_nulos': 0, 'gran_total': 0}},
+        'trep': {'votos': {}, 'meta': {}, 'resumen': {'votos_validos': 0, 'votos_blancos': 0, 'votos_nulos': 0, 'gran_total': 0}},
+        'esc': {'votos': {}, 'meta': {}, 'resumen': {'votos_validos': 0, 'votos_blancos': 0, 'votos_nulos': 0, 'gran_total': 0}},
         'matrix': None,
         'all_candidates': [],
         'header_info': get_formulario_info(jrv), # Load Formulario Cierre info
@@ -349,12 +408,12 @@ def get_comparison_data(jrv, nivel='PRESIDENTE'):
                 stats = data_esc.get('estadisticas', {}).get('distribucion_votos', {})
                 comp_data['esc']['resumen']['votos_blancos'] = int(stats.get('blancos', 0))
                 comp_data['esc']['resumen']['votos_nulos'] = int(stats.get('nulos', 0))
-                comp_data['esc']['resumen']['validos'] = int(stats.get('validos', 0))
+                comp_data['esc']['resumen']['votos_validos'] = int(stats.get('validos', 0))
                 
                 # Gran Total (Sum validos + blancos + nulos if not explicit?)
                 # JSON has "totalizacion_actas" but not explicit gran total of votes?
                 # Actually sum is safest or use validos+blancos+nulos
-                comp_data['esc']['resumen']['gran_total'] = comp_data['esc']['resumen']['validos'] + comp_data['esc']['resumen']['votos_blancos'] + comp_data['esc']['resumen']['votos_nulos']
+                comp_data['esc']['resumen']['gran_total'] = comp_data['esc']['resumen']['votos_validos'] + comp_data['esc']['resumen']['votos_blancos'] + comp_data['esc']['resumen']['votos_nulos']
                 
             except Exception as e:
                 print(f"Error loading Official Alcalde JSON: {e}")
@@ -388,10 +447,45 @@ def get_comparison_data(jrv, nivel='PRESIDENTE'):
             except Exception as e:
                 print(f"Error loading Frenael Alcalde JSON: {e}")
 
+        # --- OVERRIDE WITH DB RESUMEN IF EXISTS (Fix persistence) ---
+        # User edits are saved to 'resumenes' table, so we must load from there.
+        if trep:
+            res_db = conn.execute("SELECT * FROM resumenes WHERE acta_id = ?", (trep['id'],)).fetchone()
+            if res_db:
+                comp_data['trep']['resumen']['votos_blancos'] = res_db['votos_blancos']
+                comp_data['trep']['resumen']['votos_nulos'] = res_db['votos_nulos']
+                comp_data['trep']['resumen']['gran_total'] = res_db['gran_total']
+                
+        if esc:
+            res_db = conn.execute("SELECT * FROM resumenes WHERE acta_id = ?", (esc['id'],)).fetchone()
+            if res_db:
+                comp_data['esc']['resumen']['votos_blancos'] = res_db['votos_blancos']
+                comp_data['esc']['resumen']['votos_nulos'] = res_db['votos_nulos']
+                comp_data['esc']['resumen']['gran_total'] = res_db['gran_total']
+
+        # --- OVERRIDE VOTES WITH DB RESULTS IF EXISTS ---
+        if trep:
+            rows = conn.execute("SELECT candidato, votos FROM resultados WHERE acta_id = ?", (trep['id'],)).fetchall()
+            for row in rows:
+                if any(x in row['candidato'].upper() for x in IGNORED_KEYS): continue
+                # We trust the key saved in DB is already correct/normalized, or we re-normalize
+                final_key = normalize(row['candidato'].upper()) 
+                comp_data['trep']['votos'][final_key] = row['votos']
+                found_candidates.add(final_key)
+
+        if esc:
+            rows = conn.execute("SELECT candidato, votos FROM resultados WHERE acta_id = ?", (esc['id'],)).fetchall()
+            for row in rows:
+                if any(x in row['candidato'].upper() for x in IGNORED_KEYS): continue
+                final_key = normalize(row['candidato'].upper())
+                comp_data['esc']['votos'][final_key] = row['votos']
+                found_candidates.add(final_key)
+
     # --- Standard DB Loading for Non-ALCALDE levels (or fallback) ---
     if nivel != 'ALCALDE':
         if trep:
             comp_data['trep']['meta'] = dict(trep)
+
             resumen = conn.execute("SELECT * FROM resumenes WHERE acta_id = ?", (trep['id'],)).fetchone()
             if resumen: comp_data['trep']['resumen'] = dict(resumen)
             rows = conn.execute("SELECT candidato, votos FROM resultados WHERE acta_id = ?", (trep['id'],)).fetchall()
@@ -470,6 +564,15 @@ def get_comparison_data(jrv, nivel='PRESIDENTE'):
     # Sort alphabetically or keep as is? Alphabetical might be better for consistent display
     for resto in sorted(list(found_candidates)): 
         sorted_candidates.append(resto)
+    
+    comp_data['all_candidates'] = sorted_candidates
+
+    # Calculate Total Marks (Sum of Candidates) for Display
+    def sum_votes(v_dict):
+        try: return sum(int(v) for v in v_dict.values())
+        except: return 0
+    comp_data['trep']['total_marcas'] = sum_votes(comp_data['trep']['votos'])
+    comp_data['esc']['total_marcas'] = sum_votes(comp_data['esc']['votos'])
     
     comp_data['all_candidates'] = sorted_candidates
 
@@ -703,23 +806,27 @@ def get_comparison_data(jrv, nivel='PRESIDENTE'):
                 # 1. Try to get Presidential Total from current data if level is PRESIDENTE
                 pres_total = 0
                 if nivel == 'PRESIDENTE':
-                    pres_total = comp_data['trep']['resumen']['gran_total']
+                    # Calculate fresh total from components to ensure accuracy
+                    r_val = comp_data['trep']['resumen']
+                    sum_votes = sum(comp_data['trep']['votos'].values())
+                    pres_total = sum_votes + r_val.get('votos_blancos', 0) + r_val.get('votos_nulos', 0)
                 else:
                     # 2. Query DB for Presidential TREP total if not current level
                     row_pres = conn.execute("SELECT id FROM actas WHERE jrv = ? AND origen = 'TREP' AND nivel = 'PRESIDENTE'", (jrv,)).fetchone()
                     if row_pres:
-                        # Get Gran Total from resumenes
-                        res_pres = conn.execute("SELECT gran_total FROM resumenes WHERE acta_id = ?", (row_pres['id'],)).fetchone()
-                        if res_pres:
-                            pres_total = res_pres['gran_total']
-                        elif row_pres['debug_data']: # Fallback if resumenes empty?
-                             pass
+                     # Get Gran Total from components
+                        res_pres = conn.execute("SELECT * FROM resumenes WHERE acta_id = ?", (row_pres['id'],)).fetchone()
                         
-                        # Fallback: Sum votes from resultados if resumenes matched nothing
-                        if pres_total == 0:
-                            sum_votes = conn.execute("SELECT SUM(votos) as total FROM resultados WHERE acta_id = ?", (row_pres['id'],)).fetchone()
-                            if sum_votes and sum_votes['total']:
-                                pres_total = sum_votes['total']
+                        # Sum Valid Votes from Outcomes (Resultados)
+                        sum_votes_row = conn.execute("SELECT SUM(votos) as total FROM resultados WHERE acta_id = ?", (row_pres['id'],)).fetchone()
+                        validos = sum_votes_row['total'] if sum_votes_row and sum_votes_row['total'] else 0
+                        
+                        if res_pres:
+                             blancos = res_pres['votos_blancos'] or 0
+                             nulos = res_pres['votos_nulos'] or 0
+                             pres_total = validos + blancos + nulos
+                        else:
+                             pres_total = validos
                 
                 # Calculate
                 if pres_total > 0:
@@ -733,8 +840,8 @@ def get_comparison_data(jrv, nivel='PRESIDENTE'):
     if not has_trep:
         comp_data['trep']['votos'] = {}
         comp_data['esc']['votos'] = {}
-        comp_data['trep']['resumen'] = {'votos_blancos': 0, 'votos_nulos': 0, 'gran_total': 0}
-        comp_data['esc']['resumen'] = {'votos_blancos': 0, 'votos_nulos': 0, 'gran_total': 0}
+        comp_data['trep']['resumen'] = {'votos_validos': 0, 'votos_blancos': 0, 'votos_nulos': 0, 'gran_total': 0}
+        comp_data['esc']['resumen'] = {'votos_validos': 0, 'votos_blancos': 0, 'votos_nulos': 0, 'gran_total': 0}
         if comp_data.get('header_info'):
             comp_data['header_info']['participacion'] = "0.00%"
         if comp_data.get('matrix'):
@@ -845,17 +952,17 @@ def get_jrv_navigation(current_jrv):
         return {'prev': prev_jrv, 'next': next_jrv}
     finally: conn.close()
 
-def get_next_pending_jrv(current_jrv):
+def get_next_pending_jrv(current_jrv, level='PRESIDENTE'):
     conn = get_db_connection()
     try:
         # Buscar siguiente pendiente con ID mayor
-        query_next = "SELECT jrv FROM actas WHERE origen = 'TREP' AND estado = 'PENDIENTE' AND nivel = 'PRESIDENTE' AND CAST(jrv AS INTEGER) > CAST(? AS INTEGER) ORDER BY CAST(jrv AS INTEGER) ASC LIMIT 1"
-        row = conn.execute(query_next, (current_jrv,)).fetchone()
+        query_next = "SELECT jrv FROM actas WHERE origen = 'TREP' AND estado = 'PENDIENTE' AND nivel = ? AND CAST(jrv AS INTEGER) > CAST(? AS INTEGER) ORDER BY CAST(jrv AS INTEGER) ASC LIMIT 1"
+        row = conn.execute(query_next, (level, current_jrv,)).fetchone()
         if row: return row['jrv']
         
         # Buscar desde el principio
-        query_first = "SELECT jrv FROM actas WHERE origen = 'TREP' AND estado = 'PENDIENTE' AND nivel = 'PRESIDENTE' ORDER BY CAST(jrv AS INTEGER) ASC LIMIT 1"
-        row = conn.execute(query_first).fetchone()
+        query_first = "SELECT jrv FROM actas WHERE origen = 'TREP' AND estado = 'PENDIENTE' AND nivel = ? ORDER BY CAST(jrv AS INTEGER) ASC LIMIT 1"
+        row = conn.execute(query_first, (level,)).fetchone()
         if row and str(row['jrv']) != str(current_jrv): return row['jrv']
         return None
     finally: conn.close()
@@ -869,9 +976,8 @@ def get_global_stats():
     levels = ['PRESIDENTE', 'DIPUTADOS', 'ALCALDE']
     
     for level in levels:
-        # Initialize level stats
-        level_stats = {'trep': {'total': 0, 'nacional': 0, 'liberal': 0, 'libre': 0, 'otros': 0}, 
-                       'esc': {'total': 0, 'nacional': 0, 'liberal': 0, 'libre': 0, 'otros': 0}}
+        # Initialize level stats with empty party dicts
+        level_stats = {'trep': {}, 'esc': {}}
         
         # Query with filtering for Valid Total in FRENAEL (TREP)
         # User requirement: "solo debe sumarse los resultados que tenga valor valido de TOTAL para FRENAEL"
@@ -928,17 +1034,24 @@ def get_global_stats():
         """
         rows_trep = conn.execute(query_trep, (level,)).fetchall()
         
-        # ESC Query (No resumen filter needed if we trust file ingestion, or just checking presence)
+        # ESC Query (Strictly Filtered by TREP Processed)
+        # Only sum results from Official Actas that HAVE a corresponding TREP acta WITH DATA (gran_total > 0)
         query_esc = """
             SELECT r.candidato, SUM(r.votos) as total 
             FROM resultados r 
             JOIN actas a ON r.acta_id = a.id 
             WHERE a.nivel = ? AND a.origen = 'ESCRUTINIO'
+            AND EXISTS (
+                SELECT 1 FROM actas t 
+                JOIN resumenes res ON res.acta_id = t.id
+                WHERE t.jrv = a.jrv AND t.nivel = a.nivel AND t.origen = 'TREP'
+                AND res.gran_total > 0
+            )
             GROUP BY r.candidato
         """
         rows_esc = conn.execute(query_esc, (level,)).fetchall()
         
-        # Counts
+        # Counts - Processed (with votes)
         count_trep = conn.execute("""
             SELECT COUNT(DISTINCT a.id) 
             FROM actas a 
@@ -946,52 +1059,110 @@ def get_global_stats():
             WHERE a.nivel = ? AND a.origen = 'TREP' AND res.gran_total > 0
         """, (level,)).fetchone()[0]
         
+        # Count ESC (Filtered by TREP Processed)
         count_esc = conn.execute("""
             SELECT COUNT(DISTINCT a.id) 
             FROM actas a 
             JOIN resultados r ON r.acta_id = a.id
             WHERE a.nivel = ? AND a.origen = 'ESCRUTINIO'
+            AND EXISTS (
+                SELECT 1 FROM actas t 
+                JOIN resumenes res ON res.acta_id = t.id
+                WHERE t.jrv = a.jrv AND t.nivel = a.nivel AND t.origen = 'TREP'
+                AND res.gran_total > 0
+            )
+        """, (level,)).fetchone()[0]
+
+        # Counts - Total Inventory (for comparison context)
+        total_trep = conn.execute("SELECT COUNT(*) FROM actas WHERE nivel = ? AND origen = 'TREP'", (level,)).fetchone()[0]
+        
+        # Total ESC restricted to observed universe (Inventory Overlap)
+        # We assume if it's observed, we expect to eventually have it.
+        total_esc = conn.execute("""
+            SELECT COUNT(*) FROM actas a
+            WHERE a.nivel = ? AND a.origen = 'ESCRUTINIO'
+            AND EXISTS (SELECT 1 FROM actas t WHERE t.jrv = a.jrv AND t.nivel = a.nivel AND t.origen = 'TREP')
         """, (level,)).fetchone()[0]
         
         level_stats['trep']['actas'] = count_trep
-        level_stats['trep']['actas'] = count_trep
+        level_stats['trep']['total_inventory'] = total_trep
+        
         level_stats['esc']['actas'] = count_esc
+        level_stats['esc']['total_inventory'] = total_esc
         
         totals_validos = {'trep': 0, 'esc': 0}
         
         # Aggregate TREP
         for row in rows_trep:
             totals_validos['trep'] += row['total']
-            name = row['candidato'].upper()
-            votos = row['total']
-            if "NACIONAL" in name: level_stats['trep']['nacional'] += votos
-            elif "LIBERAL" in name: level_stats['trep']['liberal'] += votos
-            elif "LIBRE" in name or "REFUNDACION" in name: level_stats['trep']['libre'] += votos
-            else: level_stats['trep']['otros'] += votos
+            name = map_party_name(row['candidato'].upper())
+            # Skip invalid
+            if not name: continue
+            
+            # Init if new
+            if name not in level_stats['trep']: level_stats['trep'][name] = 0
+            level_stats['trep'][name] += row['total']
             
         # Aggregate ESC
         for row in rows_esc:
             totals_validos['esc'] += row['total']
-            name = row['candidato'].upper()
-            votos = row['total']
-            if "NACIONAL" in name: level_stats['esc']['nacional'] += votos
-            elif "LIBERAL" in name: level_stats['esc']['liberal'] += votos
-            elif "LIBRE" in name or "REFUNDACION" in name: level_stats['esc']['libre'] += votos
-            else: level_stats['esc']['otros'] += votos
-
-        # Format for UI
-        ui_stats = {'trep': {}, 'esc': {}}
-        for tipo in ['trep', 'esc']:
-            total_base = totals_validos[tipo]
-            ui_stats[tipo]['total'] = total_base
-            ui_stats[tipo]['actas'] = level_stats[tipo]['actas'] # Pass count
+            name = map_party_name(row['candidato'].upper())
+            # Skip invalid
+            if not name: continue
             
-            for p in ['nacional', 'liberal', 'libre', 'otros']:
-                votos = level_stats[tipo][p]
-                pct = round((votos / total_base * 100), 1) if total_base > 0 else 0
-                ui_stats[tipo][p] = {'votos': votos, 'pct': pct}
+            if name not in level_stats['esc']: level_stats['esc'][name] = 0
+            level_stats['esc'][name] += row['total']
+            
+        # Calculate Percentages and Structure for Template
+        # We want a unified list of parties to iterate over in template
+        all_parties = set(list(level_stats['trep'].keys()) + list(level_stats['esc'].keys()))
+        # Remove meta keys
+        all_parties.discard('total')
+        all_parties.discard('actas')
+        all_parties.discard('total_inventory')
+        all_parties.discard('otros') # We might still have 'otros' if map_party_name returns it, but user wants separate cards. 
+        # Actually map_party_name returns 'OTROS' for unknowns. 
+        # User said "better if you put a separate card for each party". 
+        # If map_party_name returns 'OTROS', it means it's unknown.
+        # But wait, map_party_name handles known ones.
         
-        final_stats[level] = ui_stats
+        # Priority Sort
+        priority = ["P. NACIONAL", "P. LIBERAL", "LIBRE", "DC", "PINU", "PSH", "ALIANZA"]
+        sorted_parties = sorted(list(all_parties), key=lambda x: priority.index(x) if x in priority else 99)
+        
+        level_stats['parties'] = []
+        for p in sorted_parties:
+            if p == 'total' or p == 'actas': continue
+            
+            v_trep = level_stats['trep'].get(p, 0)
+            v_esc = level_stats['esc'].get(p, 0)
+            
+            pct_trep = round((v_trep / totals_validos['trep'] * 100), 2) if totals_validos['trep'] > 0 else 0
+            pct_esc = round((v_esc / totals_validos['esc'] * 100), 2) if totals_validos['esc'] > 0 else 0
+            
+            # Icon/Color Mapping
+            color = 'gray'
+            icon = 'users'
+            if 'NACIONAL' in p: color, icon = 'blue', 'star'
+            elif 'LIBERAL' in p: color, icon = 'red', 'flag'
+            elif 'LIBRE' in p: color, icon = 'red', 'hand-fist'
+            elif 'DC' in p: color, icon = 'green', 'plant'
+            elif 'PINU' in p: color, icon = 'orange', 'sun'
+            elif 'PSH' in p or 'SALVADOR' in p: color, icon = 'cyan', 'hand-peace'
+            elif 'ALIANZA' in p: color, icon = 'purple', 'users-three'
+            
+            level_stats['parties'].append({
+                'name': p,
+                'color': color,
+                'icon': icon,
+                'trep': {'votos': v_trep, 'pct': pct_trep},
+                'esc': {'votos': v_esc, 'pct': pct_esc}
+            })
+            
+        level_stats['trep']['total'] = totals_validos['trep']
+        level_stats['esc']['total'] = totals_validos['esc']
+        
+        final_stats[level] = level_stats
 
     conn.close()
     return final_stats
@@ -1032,14 +1203,38 @@ def export_db_csv():
 
 def update_result_vote(acta_id, candidato, votos):
     conn = get_db_connection()
-    exists = conn.execute("SELECT id FROM resultados WHERE acta_id = ? AND candidato = ?", (acta_id, candidato)).fetchone()
-    if exists: conn.execute("UPDATE resultados SET votos = ? WHERE id = ?", (votos, exists['id']))
-    else: conn.execute("INSERT INTO resultados (acta_id, candidato, votos) VALUES (?, ?, ?)", (acta_id, candidato, votos))
-    conn.commit(); conn.close(); recalculate_grand_total(acta_id)
+    
+    # Try case-insensitive match first to prevent duplicates like "Nacional" vs "NACIONAL"
+    # We prioritize strict match if exists, but if not, look for case-insensitive match
+    
+    match_id = None
+    
+    # Check strict match
+    strict = conn.execute("SELECT id FROM resultados WHERE acta_id = ? AND candidato = ?", (acta_id, candidato)).fetchone()
+    if strict:
+        match_id = strict['id']
+    else:
+        # Check case-insensitive match
+        # SQLite 'LIKE' is case-insensitive for ASCII, or we can use upper()
+        # Fetch all results for this acta and check in python to be safe/consistent with logic
+        rows = conn.execute("SELECT id, candidato FROM resultados WHERE acta_id = ?", (acta_id,)).fetchall()
+        for r in rows:
+            if r['candidato'].upper() == candidato.upper():
+                match_id = r['id']
+                break
+    
+    if match_id:
+        conn.execute("UPDATE resultados SET votos = ? WHERE id = ?", (votos, match_id))
+    else:
+        conn.execute("INSERT INTO resultados (acta_id, candidato, votos) VALUES (?, ?, ?)", (acta_id, candidato, votos))
+        
+    conn.commit()
+    conn.close()
+    recalculate_grand_total(acta_id)
 
 def update_resumen_field(acta_id, field, value):
     conn = get_db_connection()
-    if field not in ['votos_blancos', 'votos_nulos']: return
+    if field not in ['votos_blancos', 'votos_nulos', 'votos_validos']: return
     exists = conn.execute("SELECT acta_id FROM resumenes WHERE acta_id = ?", (acta_id,)).fetchone()
     if not exists: conn.execute("INSERT INTO resumenes (acta_id, votos_validos, votos_blancos, votos_nulos, gran_total) VALUES (?, 0, 0, 0, 0)", (acta_id,))
     conn.execute(f"UPDATE resumenes SET {field} = ? WHERE acta_id = ?", (value, acta_id))
@@ -1047,11 +1242,27 @@ def update_resumen_field(acta_id, field, value):
 
 def recalculate_grand_total(acta_id):
     conn = get_db_connection()
+    # Get Level
+    acta = conn.execute("SELECT nivel FROM actas WHERE id=?", (acta_id,)).fetchone()
+    nivel = acta['nivel'] if acta else ''
+    
     sum_candidatos = conn.execute("SELECT SUM(votos) FROM resultados WHERE acta_id = ?", (acta_id,)).fetchone()[0] or 0
-    res = conn.execute("SELECT votos_blancos, votos_nulos FROM resumenes WHERE acta_id = ?", (acta_id,)).fetchone()
+    res = conn.execute("SELECT votos_validos, votos_blancos, votos_nulos FROM resumenes WHERE acta_id = ?", (acta_id,)).fetchone()
+    
     blancos = res['votos_blancos'] if res else 0
     nulos = res['votos_nulos'] if res else 0
-    conn.execute("UPDATE resumenes SET gran_total = ?, votos_validos = ? WHERE acta_id = ?", (sum_candidatos + blancos + nulos, sum_candidatos, acta_id))
+    validos_db = res['votos_validos'] if res else 0
+    
+    if nivel == 'DIPUTADOS':
+        # For DEPUTIES: Votos Validos is manually entered (Ballots), NOT sum of votes (Marks)
+        # Gran Total = Validos (Ballots) + Blancos + Nulos
+        gran_total = validos_db + blancos + nulos
+        conn.execute("UPDATE resumenes SET gran_total = ? WHERE acta_id = ?", (gran_total, acta_id))
+    else:
+        # For PRESIDENTE/ALCALDE: Validos = Sum of Candidates
+        gran_total = sum_candidatos + blancos + nulos
+        conn.execute("UPDATE resumenes SET gran_total = ?, votos_validos = ? WHERE acta_id = ?", (gran_total, sum_candidatos, acta_id))
+        
     conn.commit(); conn.close()
 
 def delete_result_row(acta_id, candidato):
@@ -1064,7 +1275,17 @@ def add_result_row(acta_id, candidato, votos):
 
 def delete_jrv_data(jrv):
     conn = get_db_connection()
-    conn.execute("DELETE FROM actas WHERE jrv = ?", (jrv,)); conn.commit(); conn.close()
+    # Get IDs first
+    rows = conn.execute("SELECT id FROM actas WHERE jrv = ?", (jrv,)).fetchall()
+    ids = [r['id'] for r in rows]
+    
+    if ids:
+        placeholders = ','.join('?' * len(ids))
+        conn.execute(f"DELETE FROM resultados WHERE acta_id IN ({placeholders})", ids)
+        conn.execute(f"DELETE FROM resumenes WHERE acta_id IN ({placeholders})", ids)
+        conn.execute("DELETE FROM actas WHERE jrv = ?", (jrv,))
+        
+    conn.commit(); conn.close()
 
 def validate_acta_trep(jrv, nivel='PRESIDENTE'):
     conn = get_db_connection()
@@ -1076,14 +1297,30 @@ def get_summary_table(level='PRESIDENTE'):
     # Structure: { jrv: { party: { trep: 0, esc: 0, diff: 0 }, ... } }
     summary = {}
     
-    # Get all JRVs for this level
-    query_jrvs = "SELECT DISTINCT jrv FROM actas WHERE nivel = ? ORDER BY jrv"
+    # Get all JRVs and their status (TREP)
+    # We prioritize TREP status.
+    query_jrvs = "SELECT jrv, estado FROM actas WHERE nivel = ? AND origen = 'TREP' ORDER BY jrv"
     jrvs_rows = conn.execute(query_jrvs, (level,)).fetchall()
-    # If no JRVs found, return empty
-    if not jrvs_rows:
+    
+    # Map JRV -> Status
+    jrv_status = {r['jrv']: r['estado'] for r in jrvs_rows}
+    
+    # If we have Escrutinio-only JRVs (unlikely but possible if TREP is missing), they won't be in jrv_status
+    # So we also get distinct JRVs from all sources to be safe for the loop
+    query_all = "SELECT DISTINCT jrv FROM actas WHERE nivel = ? ORDER BY jrv"
+    all_jrvs_rows = conn.execute(query_all, (level,)).fetchall()
+    
+    if not all_jrvs_rows:
         return {'columns': [], 'data': []}
         
-    jrvs = [row['jrv'] for row in jrvs_rows]
+    sorted_jrvs = [row['jrv'] for row in all_jrvs_rows]
+    # Sort numerically
+    sorted_jrvs.sort(key=lambda x: int(x) if str(x).isdigit() else x)
+    
+    # ... (Queries for results/resumenes remain same) ... 
+    
+    # (Skip down to final_list loop)
+
     
     # query results
     query = """
@@ -1104,20 +1341,6 @@ def get_summary_table(level='PRESIDENTE'):
     rows_res = conn.execute(query_res, (level,)).fetchall()
     
     data_map = {} # jrv -> { party -> { trep: 0, esc: 0 } }
-
-    def map_party_name(text):
-        up = text.upper()
-        if "NACIONAL" in up: return "P. NACIONAL"
-        if "LIBERAL" in up: return "P. LIBERAL"
-        if "LIBRE" in up or "REFUNDACION" in up: return "LIBRE"
-        if "DC" in up: return "DC"
-        if "PINU" in up: return "PINU"
-        if "ALIANZA" in up: return "ALIANZA"
-        if "SALVADOR" in up or "PSH" in up: return "PSH"
-        # Special case for "resultados" if it still exists (should be cleaned, but safe guard)
-        if "RESULTADOS" in up: return "OTROS"
-        if "COLUMNS" in up: return "OTROS"
-        return text # Return original if not matched (e.g. OTROS)
 
     for row in rows:
         jrv = row['jrv']
@@ -1146,13 +1369,32 @@ def get_summary_table(level='PRESIDENTE'):
              
         else: # PRESIDENTE
              # Use the map logic directly on candidate name
+             # Use the map logic directly on candidate name
              key = map_party_name(canda)
-             if key == canda and "VOTOS" not in key: key = "OTROS"
+             # Only treat as OTROS if it didn't map to a KNOWN key.
+             # Known keys from map_party_name: P. NACIONAL, P. LIBERAL, LIBRE, DC, PINU, ALIANZA, PSH, OTROS
+             KNOWN_KEYS = ["P. NACIONAL", "P. LIBERAL", "LIBRE", "DC", "PINU", "ALIANZA", "PSH", "OTROS"]
+             
+             # If key is None (junk), it will be caught by the check below
+             if key and key not in KNOWN_KEYS and "VOTOS" not in key:
+                 key = "OTROS"
+
+        # SKIP IF KEY IS NONE (JUNK DATA)
+        if not key: continue
 
         if jrv not in data_map: data_map[jrv] = {}
         if key not in data_map[jrv]: data_map[jrv][key] = {'trep': 0, 'esc': 0}
         
-        data_map[jrv][key][origen] += row['votos']
+        if level == 'DIPUTADOS':
+            # For Deputies, we sum votes of all candidates for the party
+            data_map[jrv][key][origen] += row['votos']
+        else:
+            # For Presidente/Alcalde, there should be 1 result per party.
+            # If duplicates exist (e.g. same party with different candidate names like 'PINU' vs 'PINU (NAME)'),
+            # we take the MAX to avoid double counting (e.g. 6 + 6 = 12).
+            # We assume duplicates have the same vote count or one is 0.
+            current = data_map[jrv][key][origen]
+            data_map[jrv][key][origen] = max(current, row['votos'])
 
     # Process Resumenes
     for row in rows_res:
@@ -1174,7 +1416,61 @@ def get_summary_table(level='PRESIDENTE'):
         
     priority = ["P. NACIONAL", "P. LIBERAL", "LIBRE", "DC", "PINU", "PSH", "ALIANZA", "OTROS", "VOTOS BLANCOS", "VOTOS NULOS"]
     sorted_parties = sorted(list(all_parties), key=lambda x: priority.index(x) if x in priority else 99)
-    
+
+    # Column Metadata (Name + Color)
+    columns_meta = []
+    for p in sorted_parties:
+        color = 'bg-gray-700 text-white' # Default
+        if 'NACIONAL' in p: color = 'bg-blue-700 text-white'
+        elif 'LIBERAL' in p: color = 'bg-red-600 text-white'
+        elif 'LIBRE' in p: color = 'bg-red-800 text-white'
+        elif 'DC' in p: color = 'bg-green-600 text-white'
+        elif 'PINU' in p: color = 'bg-orange-500 text-white'
+        elif 'PSH' in p or 'SALVADOR' in p: color = 'bg-cyan-600 text-white'
+        elif 'ALIANZA' in p: color = 'bg-purple-700 text-white'
+        
+        columns_meta.append({'name': p, 'class': color})
+
+    # --- NEW: Bulk Load Registered Voters (Efficiency) ---
+    import csv
+    import os
+    base_dir = os.path.dirname(__file__)
+    jrv_registered = {}
+    try:
+        path = os.path.join(base_dir, 'data', 'JRV_totales.csv')
+        if os.path.exists(path):
+            with open(path, mode='r', encoding='utf-8', errors='replace') as f:
+                reader = csv.DictReader(f)
+                for r in reader:
+                    # CSV Headers: NUMERO_JRV, ... Votantes
+                    jrv_num = r.get('NUMERO_JRV', '').strip()
+                    votantes = r.get('Votantes', '0')
+                    if jrv_num and votantes.isdigit():
+                        jrv_registered[jrv_num] = int(votantes)
+    except Exception as e:
+        print(f"Error reading JRV_totales bulk: {e}")
+
+    # --- NEW: Pre-fetch Presidential Totals (for Participation) ---
+    # We need Presidential Total for ALL JRVs to calculate participation correct regardless of current level view
+    pres_totals = {}
+    try:
+        # Get Validated/Pending TREP Presidential Totals
+        # Note: We prioritize Validated, but take Pending if that's what we have.
+        # Actually, let's just take whatever TREP acta exists for PRESIDENTE.
+        q_pres = """
+            SELECT a.jrv, res.gran_total, res.votos_validos, res.votos_blancos, res.votos_nulos 
+            FROM actas a 
+            JOIN resumenes res ON a.id = res.acta_id 
+            WHERE a.nivel = 'PRESIDENTE' AND a.origen = 'TREP'
+        """
+        rows_pres = conn.execute(q_pres).fetchall()
+        for rp in rows_pres:
+            # Recalculate total to be safe or use gran_total
+            # Use gran_total which logic ensures is Validos + Blancos + Nulos
+            pres_totals[rp['jrv']] = rp['gran_total']
+    except Exception as e:
+         print(f"Error pre-fetching presidential totals: {e}")
+
     final_list = []
     # Ensure all JRVs exist even if no results (though jrvs list came from actas so they exist)
     # Use jrvs list from first query to ensure order
@@ -1182,19 +1478,122 @@ def get_summary_table(level='PRESIDENTE'):
     sorted_jrvs = sorted(list(data_map.keys()), key=lambda x: int(x) if str(x).isdigit() else x)
     
     for jrv in sorted_jrvs:
-        row = {'jrv': jrv, 'results': []}
+        # Check if FRENAEL has any data (Total > 0)
+        # If FRENAEL total is 0, it means the acta is missing/deleted or empty.
+        
+        # ... (Existing logic for has_trep_data check) ...
+
+        
+        has_trep_data = False
+        row_results = []
+        
         for p in sorted_parties:
             d = data_map[jrv].get(p, {'trep': 0, 'esc': 0})
+            if d['trep'] > 0: has_trep_data = True
+            
             diff = d['esc'] - d['trep']
-            row['results'].append({
+            row_results.append({
                 'party': p,
                 'trep': d['trep'],
                 'esc': d['esc'],
                 'diff': diff
             })
-        final_list.append(row)
+            
+        if not has_trep_data:
+            continue
+
+        # Calculate Participation
+        regs = jrv_registered.get(str(jrv), 0)
+        p_total = pres_totals.get(str(jrv), 0) # Fallback to 0 if no presidential acta
         
-    return {'columns': sorted_parties, 'data': final_list}
+        partic_pct = 0
+        if regs > 0:
+            partic_pct = round((p_total / regs) * 100, 2)
+            
+        final_list.append({
+            'jrv': jrv, 
+            'status': jrv_status.get(jrv, 'PENDIENTE'), 
+            'participation': partic_pct,
+            'results': row_results
+        })
+            
+
+        
+    return {'columns': columns_meta, 'data': final_list}
+
+def get_or_create_official_acta(jrv, level):
+    conn = get_db_connection()
+    # Official origin is typically 'CNE' in this DB context for non-TREP
+    # But let's check what 'init_db' or other inserts use.
+    # 'register_manual_upload' uses 'ESCRUTINIO' for non-TREP.
+    # 'validate_acta_trep' uses 'TREP'.
+    # get_comparison_data logic: 'trep' if origen=='TREP' else 'esc'.
+    # So any non-TREP is fine. Let's use 'CNE' as it's standard for Official.
+    # Wait, 'register_manual_upload' uses 'ESCRUTINIO'.
+    # Let's stick to 'ESCRUTINIO' to match manual uploads if that's the convention, 
+    # OR 'CNE' if that's what import scripts use.
+    # The user said "Oficial", usually CNE.
+    # Let's check if there is ANY non-trep.
+    
+    # Ideally we should use the same origin as existing official data.
+    # Let's default to 'ESCRUTINIO' to be consistent with register_manual_upload
+    # or 'CNE' if we want to distinguish.
+    # Let's use 'CNE' to imply it's the expected official data container.
+    
+    origin_to_use = 'ESCRUTINIO'
+    
+    row = conn.execute("SELECT id FROM actas WHERE jrv = ? AND nivel = ? AND origen != 'TREP'", (jrv, level)).fetchone()
+    if row:
+        conn.close()
+        return row['id']
+    else:
+        # Create it
+        print(f"Creating missing OFFICIAL acta for JRV {jrv} {level}")
+        cursor = conn.execute("INSERT INTO actas (jrv, nivel, origen, filepath, estado) VALUES (?, ?, ?, '', 'PENDIENTE')", 
+                             (jrv, level, origin_to_use))
+        new_id = cursor.lastrowid
+        
+        # Init Resumen if needed?
+        conn.execute("INSERT INTO resumenes (acta_id, votos_validos, votos_blancos, votos_nulos, gran_total) VALUES (?, 0, 0, 0, 0)", (new_id,))
+        
+        conn.commit()
+        conn.close()
+        return new_id
+
+def get_dashboard_stats_by_level():
+    conn = get_db_connection()
+    levels = ['PRESIDENTE', 'DIPUTADOS', 'ALCALDE']
+    stats = {}
+    
+    for level in levels:
+        # Total JRVs (Universe for this level) - Counting distinct JRVs that have valid data
+        # Actually, let's follow the app.py logic: Total = len(jrv_list) -> count of JRVs present
+        
+        # Validated: Status = VALIDADO
+        # Pending: Status = PENDIENTE + Has Matching Escrutinio
+        
+        query = """
+            SELECT 
+                COUNT(d.id) as total,
+                SUM(CASE WHEN d.estado = 'VALIDADO' THEN 1 ELSE 0 END) as validated
+            FROM actas d
+            WHERE d.origen = 'TREP' AND d.nivel = ?
+        """
+        row = conn.execute(query, (level,)).fetchone()
+        
+        total = row['total'] or 0
+        validated = row['validated'] or 0
+        # Force pending to be everything else to ensure consistency
+        pending = total - validated
+        
+        stats[level] = {
+            'total': total,
+            'validated': validated,
+            'pending': pending
+        }
+        
+    conn.close()
+    return stats
 
 def register_manual_upload(jrv, nivel, source, filepath):
     conn = get_db_connection()
