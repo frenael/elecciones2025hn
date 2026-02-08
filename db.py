@@ -4,7 +4,10 @@ import csv
 import io
 import os
 
-DB_NAME = "auditoria.db"
+# Usar ruta absoluta basada en la ubicación de este archivo
+import os
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_NAME = os.path.join(BASE_DIR, "auditoria.db")
 
 ORDEN_OFICIAL = [
     "PARTIDO DEMOCRATA CRISTIANO DE HONDURAS",
